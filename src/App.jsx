@@ -117,6 +117,43 @@ async function sbSignIn(email, password) {
   }));
 }
 
+async function sbRefreshSession(refreshToken) {
+  const url = `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`;
+  return sbHandle(await fetch(url, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  }));
+}
+
+const SESSION_STORAGE_KEY = "efate_rides_session";
+
+function saveSessionToStorage(session) {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    }
+  } catch (e) {}
+}
+
+function loadSessionFromStorage() {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function clearSessionFromStorage() {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch (e) {}
+}
+
 /* ---------------------------------- i18n ---------------------------------- */
 
 const LANGS = [
@@ -636,20 +673,41 @@ function useAuth() {
 }
 
 function AuthProvider({ children }) {
-  // NOTE: session lives only in memory (no localStorage/sessionStorage allowed
-  // in this artifact environment), so it resets on page refresh — consistent
-  // with the rest of this prototype's state. A real deployed app would persist
-  // this via supabase-js's built-in session storage.
+  // Session is persisted to localStorage (refresh token + access token) so a
+  // real deployed visitor stays signed in across page reloads. On mount, we
+  // try to restore + refresh any saved session. This safely no-ops inside the
+  // Claude.ai artifact sandbox, where localStorage isn't available.
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [restoringSession, setRestoringSession] = useState(true);
+
+  useEffect(() => {
+    const saved = loadSessionFromStorage();
+    if (!saved || !saved.refresh_token) {
+      setRestoringSession(false);
+      return;
+    }
+    sbRefreshSession(saved.refresh_token)
+      .then((data) => {
+        const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+        setSession(next);
+        saveSessionToStorage(next);
+      })
+      .catch(() => clearSessionFromStorage())
+      .finally(() => setRestoringSession(false));
+  }, []);
 
   const signUp = async (email, password, fullName) => {
     setAuthLoading(true);
     setAuthError("");
     try {
       const data = await sbSignUp(email, password, fullName);
-      if (data.access_token) setSession({ access_token: data.access_token, user: data.user });
+      if (data.access_token) {
+        const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+        setSession(next);
+        saveSessionToStorage(next);
+      }
       return data;
     } catch (e) {
       setAuthError(e.message);
@@ -664,7 +722,9 @@ function AuthProvider({ children }) {
     setAuthError("");
     try {
       const data = await sbSignIn(email, password);
-      setSession({ access_token: data.access_token, user: data.user });
+      const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+      setSession(next);
+      saveSessionToStorage(next);
       return data;
     } catch (e) {
       setAuthError(e.message);
@@ -674,13 +734,16 @@ function AuthProvider({ children }) {
     }
   };
 
-  const signOut = () => setSession(null);
+  const signOut = () => {
+    setSession(null);
+    clearSessionFromStorage();
+  };
 
   return (
     <AuthContext.Provider value={{
       session, user: session ? session.user : null,
       accessToken: session ? session.access_token : null,
-      signUp, signIn, signOut, authLoading, authError, setAuthError,
+      signUp, signIn, signOut, authLoading, authError, setAuthError, restoringSession,
     }}>
       {children}
     </AuthContext.Provider>
@@ -845,6 +908,7 @@ function SupplierAuthProvider({ children }) {
           years_operating: data.years ? Number(data.years) : null,
           registration_number: data.idNumber || null,
           submitted_at: new Date().toISOString(),
+          kyc_status: "pending",
         }], accessToken);
         setProfile(rows[0]);
         setStatus(rows[0].kyc_status);
@@ -977,7 +1041,7 @@ function Stat({ label, value, icon: Icon }) {
 
 function Header({ mode, setMode, idVerified, onOpenAuth }) {
   const { t } = useLang();
-  const { user, signOut } = useAuth();
+  const { user, signOut, restoringSession } = useAuth();
   return (
     <div className="flex items-center justify-between px-5 md:px-10 py-4 sticky top-0 z-30" style={{ backgroundColor: C.void, borderBottom: `1px solid ${C.line}` }}>
       <div className="flex items-center gap-2.5">
@@ -1010,7 +1074,9 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
             {t("header.supplier")}
           </button>
         </div>
-        {user ? (
+        {restoringSession ? (
+          <div className="w-16 h-7 rounded-full" style={{ backgroundColor: C.panel }} />
+        ) : user ? (
           <button onClick={signOut} className="px-3 py-1.5 rounded-full text-xs" style={{ ...body, fontWeight: 500, color: C.mist, border: `1px solid ${C.line}` }}>
             {t("auth.signOut")}
           </button>
