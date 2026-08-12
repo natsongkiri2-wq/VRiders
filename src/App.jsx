@@ -1083,43 +1083,65 @@ function Hero({ query, setQuery }) {
 
 function Filters({ type, setType, deposit, setDeposit, sort, setSort, view, setView }) {
   const { t } = useLang();
+  const depositActive = deposit === "none";
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-6">
-      <Pill active={type === "all"} onClick={() => setType("all")}>{t("filters.allTypes")}</Pill>
-      {Object.entries(TYPE_META).map(([key, m]) => (
-        <Pill key={key} active={type === key} onClick={() => setType(key)}>
-          {t(`types.${key}`)}
-        </Pill>
-      ))}
-      <span className="w-px h-5 mx-1" style={{ backgroundColor: C.line }} />
-      <Pill active={deposit === "none"} onClick={() => setDeposit(deposit === "none" ? "all" : "none")}>
-        {t("filters.noDeposit")}
-      </Pill>
+    <div className="mb-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill active={type === "all"} onClick={() => setType("all")}>{t("filters.allTypes")}</Pill>
+        {Object.entries(TYPE_META).map(([key, m]) => {
+          const active = type === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setType(active ? "all" : key)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm transition-colors"
+              style={{
+                ...body, fontWeight: 500,
+                backgroundColor: active ? m.color : "transparent",
+                border: `1px solid ${active ? "transparent" : C.line}`,
+                color: active ? "#fff" : C.mist,
+              }}
+            >
+              {!active && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />}
+              {t(`types.${key}`)}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setDeposit(depositActive ? "all" : "none")}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm transition-colors"
+          style={{
+            ...body, fontWeight: 500,
+            backgroundColor: depositActive ? "rgba(229,106,62,0.14)" : "transparent",
+            border: `1px solid ${depositActive ? C.coral : C.line}`,
+            color: depositActive ? C.coralSoft : C.mist,
+          }}
+        >
+          <ShieldCheck size={13} />
+          {t("filters.noDeposit")}
+        </button>
+      </div>
 
-      <div className="ml-auto flex items-center gap-3">
-        <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ backgroundColor: C.panel }}>
-          <button
-            onClick={() => setView("list")}
-            className="w-7 h-7 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: view === "list" ? C.lagoon : "transparent" }}
-          >
-            <LayoutGrid size={13} color={view === "list" ? "#fff" : C.mist} />
-          </button>
-          <button
-            onClick={() => setView("map")}
-            className="w-7 h-7 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: view === "map" ? C.lagoon : "transparent" }}
-          >
-            <Map size={13} color={view === "map" ? "#fff" : C.mist} />
-          </button>
-        </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-xs" style={{ ...body, color: C.mist, opacity: 0.7 }}>
-          <SlidersHorizontal size={13} />
+      <div className="flex items-center justify-end gap-2.5 mt-2.5 pt-2.5" style={{ borderTop: `1px solid ${C.line}` }}>
+        <button
+          onClick={() => setView("list")}
+          className="w-7 h-7 rounded-full flex items-center justify-center"
+        >
+          <LayoutGrid size={14} color={view === "list" ? C.lagoon : C.mist} style={{ opacity: view === "list" ? 1 : 0.5 }} />
+        </button>
+        <button
+          onClick={() => setView("map")}
+          className="w-7 h-7 rounded-full flex items-center justify-center"
+        >
+          <Map size={14} color={view === "map" ? C.lagoon : C.mist} style={{ opacity: view === "map" ? 1 : 0.5 }} />
+        </button>
+        <span className="w-px h-3.5" style={{ backgroundColor: C.line }} />
+        <div className="hidden sm:flex items-center gap-1.5 text-xs" style={{ ...mono, color: C.mist, opacity: 0.7 }}>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             className="bg-transparent outline-none"
-            style={{ ...body, color: C.mist }}
+            style={{ ...mono, color: C.mist }}
           >
             <option style={{ color: C.ink }} value="rating">{t("filters.sortRating")}</option>
             <option style={{ color: C.ink }} value="priceLow">{t("filters.sortPriceLow")}</option>
