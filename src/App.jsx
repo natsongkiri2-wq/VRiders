@@ -43,6 +43,13 @@ const SUPABASE_URL = "https://dokgjfraatfzdnzqftvy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e4Va8w2ihrstELS4uat06A_h3cxhwAR";
 const SUPABASE_CONFIGURED = !SUPABASE_URL.includes("YOUR-PROJECT-REF");
 
+// User IDs allowed to see the Admin nav item. This is UI-gating only —
+// real enforcement happens server-side via the is_admin() check inside
+// the approve_supplier/reject_supplier/list_pending_suppliers functions,
+// so this list being wrong or tampered with client-side can't grant
+// unauthorized access, only hide/show a button.
+const ADMIN_USER_IDS = ["982df59c-6533-4e2f-910c-2b9942dd9c62e"];
+
 // Minimal fetch-based Supabase client (REST + Auth). This artifact environment
 // can't install @supabase/supabase-js from npm, so we talk to the same REST
 // and Auth HTTP endpoints the SDK itself uses under the hood.
@@ -170,6 +177,17 @@ const STRINGS = {
       submitSignIn: "Sign in", submitSignUp: "Create account",
       switchToSignUp: "New here? Create an account", switchToSignIn: "Already have an account? Sign in",
       notConfigured: "Backend not connected yet — add your Supabase URL and key to enable real accounts.",
+    },
+    admin: {
+      nav: "Admin",
+      heading: "Supplier approvals",
+      subheading: "{n} application(s) waiting for review",
+      empty: "Nothing waiting — all caught up.",
+      approve: "Approve", reject: "Reject",
+      approved: "Approved", rejected: "Rejected — sent back to unverified",
+      submittedOn: "Submitted {date}",
+      loadError: "Couldn't load applications:",
+      actionError: "Action failed:",
     },
     hero: {
       eyebrow: "PORT VILA · EFATE ISLAND",
@@ -369,6 +387,17 @@ const STRINGS = {
       submitSignIn: "Se connecter", submitSignUp: "Créer un compte",
       switchToSignUp: "Nouveau ici ? Créer un compte", switchToSignIn: "Déjà un compte ? Se connecter",
       notConfigured: "Backend pas encore connecté — ajoutez votre URL et clé Supabase pour activer les vrais comptes.",
+    },
+    admin: {
+      nav: "Admin",
+      heading: "Validations des loueurs",
+      subheading: "{n} demande(s) en attente de validation",
+      empty: "Rien en attente — tout est à jour.",
+      approve: "Approuver", reject: "Refuser",
+      approved: "Approuvé", rejected: "Refusé — remis en statut non vérifié",
+      submittedOn: "Envoyé le {date}",
+      loadError: "Impossible de charger les demandes :",
+      actionError: "Action échouée :",
     },
     hero: {
       eyebrow: "PORT-VILA · ÎLE D'EFATE",
@@ -1073,6 +1102,15 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
           >
             {t("header.supplier")}
           </button>
+          {user && ADMIN_USER_IDS.includes(user.id) && (
+            <button
+              onClick={() => setMode("admin")}
+              className="px-4 py-1.5 rounded-full text-sm"
+              style={{ ...body, fontWeight: 500, backgroundColor: mode === "admin" ? C.coral : "transparent", color: mode === "admin" ? "#fff" : C.mist }}
+            >
+              {t("admin.nav")}
+            </button>
+          )}
         </div>
         {restoringSession ? (
           <div className="w-16 h-7 rounded-full" style={{ backgroundColor: C.panel }} />
@@ -3073,6 +3111,110 @@ function SupplierGate({ onOpenAuth }) {
   );
 }
 
+function AdminDashboard() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    setLoadError("");
+    sbRpc("list_pending_suppliers", {}, accessToken)
+      .then((rows) => setPending(rows || []))
+      .catch((e) => setLoadError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const act = async (id, kind) => {
+    setBusyId(id);
+    setActionError("");
+    try {
+      await sbRpc(kind === "approve" ? "approve_supplier" : "reject_supplier", { target_id: id }, accessToken);
+      setPending((prev) => prev.filter((s) => s.id !== id));
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-5 md:px-10 py-8">
+      <div style={{ ...mono, fontSize: 11, color: C.coralSoft, letterSpacing: "0.06em" }}>{t("admin.nav").toUpperCase()}</div>
+      <div className="flex items-center justify-between mt-1">
+        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 24 }}>{t("admin.heading")}</h2>
+      </div>
+      <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.65, marginTop: 4 }}>
+        {t("admin.subheading", { n: pending.length })}
+      </p>
+
+      {loadError && (
+        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.loadError")} {loadError}</span>
+        </div>
+      )}
+      {actionError && (
+        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.actionError")} {actionError}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+      ) : pending.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.empty")}</div>
+      ) : (
+        <div className="flex flex-col gap-3 mt-5">
+          {pending.map((s) => (
+            <div key={s.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{s.business_name}</div>
+                  <div style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.75, marginTop: 4, lineHeight: 1.6 }}>
+                    {s.contact_name} · {s.phone}<br />
+                    {s.email}<br />
+                    {s.business_type === "registered" ? "Registered company" : "Individual operator"}
+                    {s.registration_number ? ` · ${s.registration_number}` : ""}
+                  </div>
+                  {s.submitted_at && (
+                    <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 6 }}>
+                      {t("admin.submittedOn", { date: new Date(s.submitted_at).toLocaleDateString() })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3.5">
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => act(s.id, "approve")}
+                  className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}
+                >
+                  {busyId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t("admin.approve")}
+                </button>
+                <button
+                  disabled={busyId === s.id}
+                  onClick={() => act(s.id, "reject")}
+                  className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}
+                >
+                  {t("admin.reject")}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SupplierDashboard({ onOpenAuth }) {
   const { t } = useLang();
   const { status } = useSupplierAuth();
@@ -3418,6 +3560,8 @@ function AppInner() {
             </div>
           )}
         </>
+      ) : mode === "admin" ? (
+        <AdminDashboard />
       ) : (
         <SupplierDashboard onOpenAuth={() => setShowAuth(true)} />
       )}
