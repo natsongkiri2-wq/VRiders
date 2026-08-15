@@ -48,7 +48,7 @@ const SUPABASE_CONFIGURED = !SUPABASE_URL.includes("YOUR-PROJECT-REF");
 // the approve_supplier/reject_supplier/list_pending_suppliers functions,
 // so this list being wrong or tampered with client-side can't grant
 // unauthorized access, only hide/show a button.
-const ADMIN_USER_IDS = ["982df59c-6533-4e2f-910c-2b9942dd9c62e"];
+const ADMIN_USER_IDS = ["982df59c-6533-4e2f-910c-2b942dd9c62e"];
 
 // Minimal fetch-based Supabase client (REST + Auth). This artifact environment
 // can't install @supabase/supabase-js from npm, so we talk to the same REST
