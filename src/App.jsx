@@ -3220,6 +3220,9 @@ function SupplierDashboard({ onOpenAuth }) {
   const { accessToken } = useAuth();
   const { status, profile } = useSupplierAuth();
   const [reqs, setReqs] = useState(REQUESTS);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsError, setBookingsError] = useState("");
+  const [supplierReviews, setSupplierReviews] = useState([]);
   const [myVehicles, setMyVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [vehiclesError, setVehiclesError] = useState("");
@@ -3228,10 +3231,12 @@ function SupplierDashboard({ onOpenAuth }) {
   const [disputes, setDisputes] = useState(DISPUTES);
   const [calendarVehicleId, setCalendarVehicleId] = useState(null);
 
+  const usingRealData = SUPABASE_CONFIGURED && !!profile;
+
   // Once we know the real signed-in supplier, load their real vehicles
   // instead of the demo "Vila 4x4 Rentals" mock set.
   useEffect(() => {
-    if (!SUPABASE_CONFIGURED || !profile) return;
+    if (!usingRealData) return;
     let cancelled = false;
     setVehiclesLoading(true);
     setVehiclesError("");
@@ -3251,15 +3256,80 @@ function SupplierDashboard({ onOpenAuth }) {
       .catch((e) => setVehiclesError(e.message))
       .finally(() => !cancelled && setVehiclesLoading(false));
     return () => { cancelled = true; };
-  }, [profile, accessToken]);
+  }, [usingRealData, profile, accessToken]);
 
-  const act = (id, status) => setReqs(reqs.map((r) => (r.id === id ? { ...r, status } : r)));
+  // Real booking requests for this supplier.
+  useEffect(() => {
+    if (!usingRealData) return;
+    let cancelled = false;
+    setBookingsLoading(true);
+    setBookingsError("");
+    sbSelect("bookings", {
+      select: "id,status,date_from,date_to,created_at,vehicles(name),profiles(full_name)",
+      query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
+      accessToken,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setReqs(rows.map((r) => ({
+          id: r.id,
+          vehicle: (r.vehicles && r.vehicles.name) || "—",
+          customer: (r.profiles && r.profiles.full_name) || "Customer",
+          dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
+          status: r.status,
+          created_at: r.created_at,
+          customerRating: null,
+        })));
+      })
+      .catch((e) => setBookingsError(e.message))
+      .finally(() => !cancelled && setBookingsLoading(false));
+    return () => { cancelled = true; };
+  }, [usingRealData, profile, accessToken]);
+
+  // Real reviews left for this supplier.
+  useEffect(() => {
+    if (!usingRealData) return;
+    let cancelled = false;
+    sbSelect("reviews", {
+      select: "id,rating,comment,created_at,profiles(full_name),bookings(vehicles(name))",
+      query: `&target_supplier_id=eq.${profile.id}&target_type=eq.supplier&order=created_at.desc`,
+      accessToken,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setSupplierReviews(rows.map((r) => ({
+          id: r.id,
+          customer: (r.profiles && r.profiles.full_name) || "Customer",
+          rating: r.rating,
+          comment: r.comment,
+          vehicle: (r.bookings && r.bookings.vehicles && r.bookings.vehicles.name) || "",
+          date: fmtDateShort(r.created_at),
+        })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [usingRealData, profile, accessToken]);
+
+  const act = async (id, newStatus) => {
+    if (usingRealData) {
+      const prev = reqs;
+      setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+      try {
+        await sbUpdate("bookings", `id=eq.${id}`, { status: newStatus }, accessToken);
+      } catch (e) {
+        setReqs(prev);
+        setBookingsError(e.message);
+      }
+      return;
+    }
+    setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+  };
   const rateCustomer = (id, rating) => setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
   const respondDispute = (id, response) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
   const resolveDispute = (id) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
 
   const handleAdd = async (vehicle) => {
-    if (SUPABASE_CONFIGURED && profile) {
+    if (usingRealData) {
       try {
         const rows = await sbInsert("vehicles", [{
           supplier_id: profile.id,
@@ -3295,7 +3365,14 @@ function SupplierDashboard({ onOpenAuth }) {
     setTimeout(() => setJustAdded(null), 4000);
   };
 
-  const avgRating = (REVIEWS.reduce((s, r) => s + r.rating, 0) / REVIEWS.length).toFixed(1);
+  const reviewsSource = usingRealData ? supplierReviews : REVIEWS;
+  const avgRating = reviewsSource.length
+    ? (reviewsSource.reduce((s, r) => s + r.rating, 0) / reviewsSource.length).toFixed(1)
+    : "—";
+  const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); }, []);
+  const monthlyBookingsCount = usingRealData
+    ? reqs.filter((r) => r.created_at && new Date(r.created_at) >= monthStart).length
+    : 11;
   const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
 
   if (status !== "verified") {
@@ -3304,9 +3381,6 @@ function SupplierDashboard({ onOpenAuth }) {
 
   return (
     <div className="max-w-5xl mx-auto px-5 md:px-10 py-8">
-      <div className="rounded-lg p-3 mb-4" style={{ backgroundColor: "#000", border: "1px solid #f0a", fontSize: 10, fontFamily: "monospace", color: "#0f0", wordBreak: "break-all" }}>
-        DEBUG — status: {JSON.stringify(status)} | profile: {JSON.stringify(profile)} | vehiclesLoading: {String(vehiclesLoading)} | vehiclesError: {JSON.stringify(vehiclesError)} | myVehicles.length: {myVehicles.length}
-      </div>
       <div className="flex items-center gap-2">
         <div style={{ ...mono, fontSize: 11, color: C.coralSoft, letterSpacing: "0.06em" }}>{t("supplier.dashboardLabel")}</div>
         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
@@ -3323,6 +3397,11 @@ function SupplierDashboard({ onOpenAuth }) {
           <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{vehiclesError}</span>
         </div>
       )}
+      {bookingsError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{bookingsError}</span>
+        </div>
+      )}
 
       {justAdded && (
         <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ backgroundColor: "rgba(46,158,134,0.15)", border: `1px solid ${C.lagoon}` }}>
@@ -3337,7 +3416,7 @@ function SupplierDashboard({ onOpenAuth }) {
         <Stat label={t("supplier.activeListings")} value={myVehicles.length} icon={LayoutGrid} />
         <Stat label={t("supplier.pendingRequests")} value={reqs.filter((r) => r.status === "pending").length} icon={Inbox} />
         <Stat label={t("supplier.avgRating")} value={avgRating} icon={Star} />
-        <Stat label={t("supplier.monthlyBookings")} value="11" icon={TrendingUp} />
+        <Stat label={t("supplier.monthlyBookings")} value={monthlyBookingsCount} icon={TrendingUp} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mt-8">
@@ -3346,6 +3425,9 @@ function SupplierDashboard({ onOpenAuth }) {
             <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("supplier.bookingRequests")}</h3>
           </div>
           <div className="flex flex-col gap-2.5">
+            {reqs.length === 0 && !bookingsLoading && (
+              <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
+            )}
             {reqs.map((r) => (
               <div key={r.id} className="rounded-xl p-3.5" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
                 <div className="flex items-center justify-between">
@@ -3387,7 +3469,10 @@ function SupplierDashboard({ onOpenAuth }) {
           <div className="mt-6">
             <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginBottom: 12 }}>{t("supplier.reviewsFromCustomers")}</h3>
             <div className="flex flex-col gap-2.5">
-              {REVIEWS.map((rv) => (
+              {reviewsSource.length === 0 && (
+                <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
+              )}
+              {reviewsSource.map((rv) => (
                 <div key={rv.id} className="rounded-xl p-3.5" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
                   <div className="flex items-center justify-between">
                     <span style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13 }}>{rv.customer}</span>
@@ -3409,6 +3494,9 @@ function SupplierDashboard({ onOpenAuth }) {
             </button>
           </div>
           <div className="flex flex-col gap-2.5">
+            {myVehicles.length === 0 && !vehiclesLoading && (
+              <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
+            )}
             {myVehicles.map((v) => (
               <div key={v.id} className="rounded-xl p-3.5 flex items-center justify-between" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
                 <div>
@@ -3441,8 +3529,8 @@ function SupplierDashboard({ onOpenAuth }) {
           <div className="flex items-center gap-1.5">
             <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6 }}>{t("supplier.selectVehicle")}</span>
             <select
-              value={calendarVehicleId}
-              onChange={(e) => setCalendarVehicleId(Number(e.target.value))}
+              value={calendarVehicleId || ""}
+              onChange={(e) => setCalendarVehicleId(e.target.value)}
               className="px-2.5 py-1.5 rounded-lg text-xs outline-none"
               style={{ ...body, backgroundColor: C.panel, color: C.sand, border: `1px solid ${C.line}` }}
             >
