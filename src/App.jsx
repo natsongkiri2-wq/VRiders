@@ -3217,25 +3217,79 @@ function AdminDashboard() {
 
 function SupplierDashboard({ onOpenAuth }) {
   const { t } = useLang();
-  const { status } = useSupplierAuth();
+  const { accessToken } = useAuth();
+  const { status, profile } = useSupplierAuth();
   const [reqs, setReqs] = useState(REQUESTS);
-  const [myVehicles, setMyVehicles] = useState(() =>
-    VEHICLES.filter((v) => v.supplier === "Vila 4x4 Rentals" || v.supplier === "Island Hopper Rentals")
-  );
+  const [myVehicles, setMyVehicles] = useState([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [vehiclesError, setVehiclesError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [justAdded, setJustAdded] = useState(null);
   const [disputes, setDisputes] = useState(DISPUTES);
-  const [calendarVehicleId, setCalendarVehicleId] = useState(() =>
-    VEHICLES.find((v) => v.supplier === "Vila 4x4 Rentals" || v.supplier === "Island Hopper Rentals")?.id
-  );
+  const [calendarVehicleId, setCalendarVehicleId] = useState(null);
+
+  // Once we know the real signed-in supplier, load their real vehicles
+  // instead of the demo "Vila 4x4 Rentals" mock set.
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !profile) return;
+    let cancelled = false;
+    setVehiclesLoading(true);
+    setVehiclesError("");
+    sbSelect("vehicles", { query: `&supplier_id=eq.${profile.id}&order=created_at.desc`, accessToken })
+      .then((rows) => {
+        if (cancelled) return;
+        const mapped = rows.map((r) => ({
+          id: r.id, name: r.name, type: r.type,
+          supplier: profile.business_name,
+          verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
+          price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
+          trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
+        }));
+        setMyVehicles(mapped);
+        setCalendarVehicleId((prev) => prev && mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id);
+      })
+      .catch((e) => setVehiclesError(e.message))
+      .finally(() => !cancelled && setVehiclesLoading(false));
+    return () => { cancelled = true; };
+  }, [profile, accessToken]);
 
   const act = (id, status) => setReqs(reqs.map((r) => (r.id === id ? { ...r, status } : r)));
   const rateCustomer = (id, rating) => setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
   const respondDispute = (id, response) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
   const resolveDispute = (id) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
 
-  const handleAdd = (vehicle) => {
-    setMyVehicles([vehicle, ...myVehicles]);
+  const handleAdd = async (vehicle) => {
+    if (SUPABASE_CONFIGURED && profile) {
+      try {
+        const rows = await sbInsert("vehicles", [{
+          supplier_id: profile.id,
+          name: vehicle.name,
+          type: vehicle.type,
+          price_per_day: vehicle.price,
+          deposit_amount: vehicle.deposit,
+          seats: vehicle.seats,
+          transmission: vehicle.trans,
+          fuel: vehicle.fuel,
+          airport_pickup: vehicle.airport,
+          area: vehicle.area,
+        }], accessToken);
+        const r = rows[0];
+        const mapped = {
+          id: r.id, name: r.name, type: r.type, supplier: profile.business_name,
+          verified: r.verified, rating: 0, reviews: 0,
+          price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
+          trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
+        };
+        setMyVehicles((prev) => [mapped, ...prev]);
+        setCalendarVehicleId((prev) => prev || mapped.id);
+      } catch (e) {
+        setVehiclesError(e.message);
+        setShowAdd(false);
+        return;
+      }
+    } else {
+      setMyVehicles([vehicle, ...myVehicles]);
+    }
     setShowAdd(false);
     setJustAdded(vehicle.name);
     setTimeout(() => setJustAdded(null), 4000);
@@ -3250,6 +3304,9 @@ function SupplierDashboard({ onOpenAuth }) {
 
   return (
     <div className="max-w-5xl mx-auto px-5 md:px-10 py-8">
+      <div className="rounded-lg p-3 mb-4" style={{ backgroundColor: "#000", border: "1px solid #f0a", fontSize: 10, fontFamily: "monospace", color: "#0f0", wordBreak: "break-all" }}>
+        DEBUG — status: {JSON.stringify(status)} | profile: {JSON.stringify(profile)} | vehiclesLoading: {String(vehiclesLoading)} | vehiclesError: {JSON.stringify(vehiclesError)} | myVehicles.length: {myVehicles.length}
+      </div>
       <div className="flex items-center gap-2">
         <div style={{ ...mono, fontSize: 11, color: C.coralSoft, letterSpacing: "0.06em" }}>{t("supplier.dashboardLabel")}</div>
         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
@@ -3257,7 +3314,15 @@ function SupplierDashboard({ onOpenAuth }) {
           <span style={{ ...body, fontSize: 9.5, fontWeight: 600, color: C.lagoon }}>{t("kyc.verifiedBadge")}</span>
         </span>
       </div>
-      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26, marginTop: 4 }}>{t("supplier.welcomeBack", { supplier: "Vila 4x4 Rentals" })}</h2>
+      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26, marginTop: 4 }}>
+        {t("supplier.welcomeBack", { supplier: (profile && profile.business_name) || "Vila 4x4 Rentals" })}
+      </h2>
+
+      {vehiclesError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{vehiclesError}</span>
+        </div>
+      )}
 
       {justAdded && (
         <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ backgroundColor: "rgba(46,158,134,0.15)", border: `1px solid ${C.lagoon}` }}>
