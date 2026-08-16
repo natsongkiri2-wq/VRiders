@@ -3229,9 +3229,39 @@ function SupplierDashboard({ onOpenAuth }) {
   const [showAdd, setShowAdd] = useState(false);
   const [justAdded, setJustAdded] = useState(null);
   const [disputes, setDisputes] = useState(DISPUTES);
+  const [disputesLoading, setDisputesLoading] = useState(false);
+  const [disputesError, setDisputesError] = useState("");
   const [calendarVehicleId, setCalendarVehicleId] = useState(null);
 
   const usingRealData = SUPABASE_CONFIGURED && !!profile;
+
+  // Real disputes raised against this supplier's bookings.
+  useEffect(() => {
+    if (!usingRealData) return;
+    let cancelled = false;
+    setDisputesLoading(true);
+    setDisputesError("");
+    sbSelect("disputes", {
+      select: "id,category,description,status,supplier_response,created_at,bookings!inner(vehicles(name)),profiles!disputes_raised_by_fkey(full_name)",
+      query: `&bookings.supplier_id=eq.${profile.id}&order=created_at.desc`,
+      accessToken,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setDisputes(rows.map((d) => ({
+          id: d.id,
+          category: d.category,
+          description: d.description,
+          status: d.status,
+          response: d.supplier_response || "",
+          vehicle: (d.bookings && d.bookings.vehicles && d.bookings.vehicles.name) || "—",
+          customer: (d.profiles && d.profiles.full_name) || "Customer",
+        })));
+      })
+      .catch((e) => setDisputesError(e.message))
+      .finally(() => !cancelled && setDisputesLoading(false));
+    return () => { cancelled = true; };
+  }, [usingRealData, profile, accessToken]);
 
   // Once we know the real signed-in supplier, load their real vehicles
   // instead of the demo "Vila 4x4 Rentals" mock set.
@@ -3325,8 +3355,34 @@ function SupplierDashboard({ onOpenAuth }) {
     setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
   };
   const rateCustomer = (id, rating) => setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
-  const respondDispute = (id, response) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
-  const resolveDispute = (id) => setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
+  const respondDispute = async (id, response) => {
+    if (usingRealData) {
+      const prev = disputes;
+      setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
+      try {
+        await sbUpdate("disputes", `id=eq.${id}`, { supplier_response: response }, accessToken);
+      } catch (e) {
+        setDisputes(prev);
+        setDisputesError(e.message);
+      }
+      return;
+    }
+    setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
+  };
+  const resolveDispute = async (id) => {
+    if (usingRealData) {
+      const prev = disputes;
+      setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
+      try {
+        await sbUpdate("disputes", `id=eq.${id}`, { status: "resolved", resolved_at: new Date().toISOString() }, accessToken);
+      } catch (e) {
+        setDisputes(prev);
+        setDisputesError(e.message);
+      }
+      return;
+    }
+    setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
+  };
 
   const handleAdd = async (vehicle) => {
     if (usingRealData) {
@@ -3400,6 +3456,11 @@ function SupplierDashboard({ onOpenAuth }) {
       {bookingsError && (
         <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
           <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{bookingsError}</span>
+        </div>
+      )}
+      {disputesError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{disputesError}</span>
         </div>
       )}
 
