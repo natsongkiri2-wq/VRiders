@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp, Compass,
-  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale
+  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container
 } from "lucide-react";
 
 /* ---------------------------------- tokens ---------------------------------- */
@@ -204,7 +204,7 @@ const STRINGS = {
       sortPriceHigh: "Sort: Price, high to low",
       noResults: "No vehicles match those filters yet.",
     },
-    types: { car: "Car", "4x4": "4x4 / SUV", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "E-Bike" },
+    types: { car: "Car", "4x4": "SUV 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "E-Bike", pickup: "Pickup 4x4" },
     card: { perDay: "VUV/day", deposit: "VUV deposit", noDeposit: "No deposit", airport: "Airport pickup" },
     detail: {
       seats: "Seats", transmission: "Transmission", fuel: "Fuel", airportPickup: "Airport pickup",
@@ -414,7 +414,7 @@ const STRINGS = {
       sortPriceHigh: "Trier : Prix décroissant",
       noResults: "Aucun véhicule ne correspond à ces filtres pour l'instant.",
     },
-    types: { car: "Voiture", "4x4": "4x4 / SUV", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "Vélo électrique" },
+    types: { car: "Voiture", "4x4": "VUS 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "Vélo électrique", pickup: "Pick-up 4x4" },
     card: { perDay: "VUV/jour", deposit: "VUV de caution", noDeposit: "Sans caution", airport: "Prise en charge à l'aéroport" },
     detail: {
       seats: "Places", transmission: "Transmission", fuel: "Carburant", airportPickup: "Prise en charge aéroport",
@@ -638,11 +638,12 @@ function LanguageSwitcher() {
 
 const TYPE_META = {
   car: { label: "Car", icon: Car, color: C.lagoon },
-  "4x4": { label: "4x4 / SUV", icon: Truck, color: C.coral },
+  "4x4": { label: "SUV 4x4", icon: Truck, color: C.coral },
   scooter: { label: "Scooter", icon: Bike, color: C.hibiscus },
   van: { label: "Van / Minibus", icon: Bus, color: "#C9A227" },
   quad: { label: "Quad", icon: Mountain, color: "#8B5E3C" },
   ebike: { label: "E-Bike", icon: Zap, color: "#4C86C9" },
+  pickup: { label: "Pickup 4x4", icon: Container, color: "#6B7250" },
 };
 
 // Approximate positions on the stylized island outline used by MapView (viewBox 0 0 500 320)
