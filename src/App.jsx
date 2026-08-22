@@ -193,7 +193,13 @@ const LANGS = [
 
 const STRINGS = {
   en: {
-    header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "ID verified" },
+    header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "ID verified", myBookings: "My bookings" },
+    mybookings: {
+      heading: "My bookings", subheading: "Everything you've requested, in one place.",
+      empty: "No bookings yet — go find a vehicle.", browseBtn: "Browse vehicles",
+      signInTitle: "Sign in to see your bookings", signInBody: "Your booking history and requests will show up here once you're signed in.",
+      loadError: "Couldn't load your bookings:",
+    },
     auth: {
       signIn: "Sign in", signUp: "Sign up", signOut: "Sign out",
       email: "Email", password: "Password", fullName: "Full name",
@@ -301,6 +307,7 @@ const STRINGS = {
     id: {
       title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — you won't need to do this again on this device.",
       fullName: "Full name (as on license)", licenseNumber: "License number", expiry: "Expiry date", country: "Issuing country",
+      phone: "Phone number", phoneNote: "So the supplier can reach you about this booking — shared only with suppliers you book with.",
       idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — suppliers may ask to see it alongside your license at pickup.",
       photoLabel: "Photo of your license", tapUpload: "Tap to capture or upload",
       verifyBtn: "Verify my license",
@@ -404,7 +411,13 @@ const STRINGS = {
   },
 
   fr: {
-    header: { renter: "Je loue", supplier: "Je suis loueur", verified: "Identité vérifiée" },
+    header: { renter: "Je loue", supplier: "Je suis loueur", verified: "Identité vérifiée", myBookings: "Mes réservations" },
+    mybookings: {
+      heading: "Mes réservations", subheading: "Tout ce que vous avez demandé, au même endroit.",
+      empty: "Aucune réservation pour l'instant — trouvez un véhicule.", browseBtn: "Voir les véhicules",
+      signInTitle: "Connectez-vous pour voir vos réservations", signInBody: "Votre historique de réservations apparaîtra ici une fois connecté.",
+      loadError: "Impossible de charger vos réservations :",
+    },
     auth: {
       signIn: "Se connecter", signUp: "S'inscrire", signOut: "Se déconnecter",
       email: "E-mail", password: "Mot de passe", fullName: "Nom complet",
@@ -512,6 +525,7 @@ const STRINGS = {
     id: {
       title: "Vérifiez votre permis", subtitle: "Vérification unique pour rassurer les loueurs — vous n'aurez plus à le refaire sur cet appareil.",
       fullName: "Nom complet (comme sur le permis)", licenseNumber: "Numéro de permis", expiry: "Date d'expiration", country: "Pays émetteur",
+      phone: "Numéro de téléphone", phoneNote: "Pour que le loueur puisse vous joindre au sujet de cette réservation — partagé uniquement avec les loueurs chez qui vous réservez.",
       idpNote: "Comme ce permis n'a pas été délivré au Vanuatu, apportez aussi votre Permis de Conduire International (PCI) — les loueurs peuvent le demander au départ.",
       photoLabel: "Photo de votre permis", tapUpload: "Toucher pour photographier ou importer",
       verifyBtn: "Vérifier mon permis",
@@ -1110,6 +1124,15 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
           >
             {t("header.supplier")}
           </button>
+          {user && (
+            <button
+              onClick={() => setMode("mybookings")}
+              className="px-4 py-1.5 rounded-full text-sm"
+              style={{ ...body, fontWeight: 500, backgroundColor: mode === "mybookings" ? C.lagoon : "transparent", color: mode === "mybookings" ? "#fff" : C.mist }}
+            >
+              {t("header.myBookings")}
+            </button>
+          )}
           {user && ADMIN_USER_IDS.includes(user.id) && (
             <button
               onClick={() => setMode("admin")}
@@ -2254,13 +2277,14 @@ const LICENSE_COUNTRIES = ["Vanuatu", "Australia", "New Zealand", "France", "Uni
 
 function IDVerificationModal({ onClose, onVerified }) {
   const { t } = useLang();
+  const { user, accessToken } = useAuth();
   const [stage, setStage] = useState("form"); // form | checking | done
-  const [form, setForm] = useState({ fullName: "", licenseNumber: "", country: "Vanuatu", expiry: "", photo: null });
+  const [form, setForm] = useState({ fullName: "", phone: "", licenseNumber: "", country: "Vanuatu", expiry: "", photo: null });
   const [error, setError] = useState("");
   const set = (k, v) => setForm({ ...form, [k]: v });
 
   const needsIDP = form.country !== "Vanuatu" && form.country !== "";
-  const valid = form.fullName.trim() && form.licenseNumber.trim() && form.expiry && form.photo;
+  const valid = form.fullName.trim() && form.phone.trim() && form.licenseNumber.trim() && form.expiry && form.photo;
 
   const handlePhoto = async (file) => {
     if (!file) return;
@@ -2268,13 +2292,23 @@ function IDVerificationModal({ onClose, onVerified }) {
     set("photo", dataUrl);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (new Date(form.expiry) < new Date()) {
       setError(t("id.expiredError"));
       return;
     }
     setError("");
     setStage("checking");
+    // Save the phone number now so suppliers can reach this customer about
+    // their bookings — this is real, unlike the license check below (which
+    // is still a UI-only simulation; see id.subtitle for the disclosure).
+    if (SUPABASE_CONFIGURED && user) {
+      try {
+        await sbUpdate("profiles", `id=eq.${user.id}`, { phone: form.phone.trim() }, accessToken);
+      } catch (e) {
+        console.error("Saving phone number failed:", e.message);
+      }
+    }
     setTimeout(() => setStage("done"), 1400);
   };
 
@@ -2297,6 +2331,12 @@ function IDVerificationModal({ onClose, onVerified }) {
                 <FieldLabel>{t("id.fullName")}</FieldLabel>
                 <input value={form.fullName} onChange={(e) => set("fullName", e.target.value)} placeholder="e.g. Sarah Malantugun"
                   className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <FieldLabel>{t("id.phone")}</FieldLabel>
+                <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="e.g. +678 5551 021"
+                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4, lineHeight: 1.4 }}>{t("id.phoneNote")}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -3396,7 +3436,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsLoading(true);
     setBookingsError("");
     sbSelect("bookings", {
-      select: "id,status,date_from,date_to,created_at,vehicles(name),profiles(full_name)",
+      select: "id,status,date_from,date_to,created_at,vehicles(name),profiles(full_name,phone)",
       query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
       accessToken,
     })
@@ -3406,6 +3446,7 @@ function SupplierDashboard({ onOpenAuth }) {
           id: r.id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
           customer: (r.profiles && r.profiles.full_name) || "Customer",
+          customerPhone: (r.profiles && r.profiles.phone) || "",
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
           status: r.status,
           created_at: r.created_at,
@@ -3604,7 +3645,10 @@ function SupplierDashboard({ onOpenAuth }) {
             {reqs.length === 0 && !bookingsLoading && (
               <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
             )}
-            {reqs.map((r) => (
+            {reqs.map((r) => {
+              const custDigits = (r.customerPhone || "").replace(/[^0-9]/g, "");
+              const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Efate Rides.`);
+              return (
               <div key={r.id} className="rounded-xl p-3.5" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -3626,6 +3670,20 @@ function SupplierDashboard({ onOpenAuth }) {
                     </span>
                   ) : null}
                 </div>
+                {custDigits && (
+                  <div className="flex items-center gap-2 mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    <a href={`https://wa.me/${custDigits}?text=${custMsg}`} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px]"
+                      style={{ ...body, fontWeight: 600, backgroundColor: "rgba(37,211,102,0.15)", color: "#25D366" }}>
+                      <MessageCircle size={11} /> {t("booking.whatsapp")}
+                    </a>
+                    <a href={`tel:+${custDigits}`}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px]"
+                      style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                      <Phone size={11} /> {t("booking.call")}
+                    </a>
+                  </div>
+                )}
                 {r.status === "completed" && (
                   <div className="mt-2.5 pt-2.5 flex items-center justify-between" style={{ borderTop: `1px dashed ${C.line}` }}>
                     <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.65 }}>
@@ -3639,7 +3697,8 @@ function SupplierDashboard({ onOpenAuth }) {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-6">
@@ -3767,6 +3826,113 @@ function SupplierDashboard({ onOpenAuth }) {
       </div>
 
       {showAdd && <AddVehicleModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
+    </div>
+  );
+}
+
+/* ---------------------------------- my bookings (customer) ---------------------------------- */
+
+function MyBookings() {
+  const { t } = useLang();
+  const { user, accessToken } = useAuth();
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    sbSelect("bookings", {
+      select: "id,status,date_from,date_to,reference,created_at,vehicles(name,type),suppliers(business_name,phone)",
+      query: `&customer_id=eq.${user.id}&order=created_at.desc`,
+      accessToken,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setBookings(rows.map((r) => ({
+          id: r.id,
+          vehicle: (r.vehicles && r.vehicles.name) || "—",
+          supplier: (r.suppliers && r.suppliers.business_name) || "—",
+          supplierPhone: (r.suppliers && r.suppliers.phone) || "",
+          dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
+          status: r.status,
+          reference: r.reference,
+        })));
+      })
+      .catch((e) => !cancelled && setError(e.message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [user, accessToken]);
+
+  const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto px-5 py-24 text-center">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+          <Inbox size={22} color={C.mist} />
+        </div>
+        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 20, marginTop: 16 }}>{t("mybookings.signInTitle")}</h2>
+        <p style={{ ...body, color: C.mist, opacity: 0.75, fontSize: 13, marginTop: 10, lineHeight: 1.6 }}>{t("mybookings.signInBody")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-5 md:px-10 py-8">
+      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 24 }}>{t("mybookings.heading")}</h2>
+      <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.65, marginTop: 4 }}>{t("mybookings.subheading")}</p>
+
+      {error && (
+        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("mybookings.loadError")} {error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+      ) : bookings.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("mybookings.empty")}</div>
+      ) : (
+        <div className="flex flex-col gap-3 mt-6">
+          {bookings.map((b) => {
+            const digits = (b.supplierPhone || "").replace(/[^0-9]/g, "");
+            const msg = encodeURIComponent(`Hi ${b.supplier}, checking in about my ${b.vehicle} booking (ref ${b.reference || b.id}).`);
+            return (
+              <div key={b.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{b.vehicle}</div>
+                    <div style={{ ...body, color: C.mist, opacity: 0.7, fontSize: 12, marginTop: 2 }}>{b.supplier} · {b.dates}</div>
+                    {b.reference && (
+                      <div style={{ ...mono, color: C.coralSoft, fontSize: 11, marginTop: 4 }}>{b.reference}</div>
+                    )}
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] shrink-0" style={{ ...body, fontWeight: 600, backgroundColor: b.status === "accepted" ? "rgba(46,158,134,0.18)" : b.status === "declined" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)", color: b.status === "accepted" ? C.lagoon : b.status === "declined" ? C.hibiscus : C.coralSoft }}>
+                    {statusLabel(b.status)}
+                  </span>
+                </div>
+                {digits && (
+                  <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    <a href={`https://wa.me/${digits}?text=${msg}`} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px]"
+                      style={{ ...body, fontWeight: 600, backgroundColor: "rgba(37,211,102,0.15)", color: "#25D366" }}>
+                      <MessageCircle size={11} /> {t("booking.whatsapp")}
+                    </a>
+                    <a href={`tel:+${digits}`}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px]"
+                      style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                      <Phone size={11} /> {t("booking.call")}
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -3936,6 +4102,8 @@ function AppInner() {
         </>
       ) : mode === "admin" ? (
         <AdminDashboard />
+      ) : mode === "mybookings" ? (
+        <MyBookings />
       ) : (
         <SupplierDashboard onOpenAuth={() => setShowAuth(true)} />
       )}
