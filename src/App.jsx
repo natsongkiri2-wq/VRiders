@@ -97,6 +97,14 @@ async function sbUpdate(table, query, patch, accessToken) {
   }));
 }
 
+async function sbDelete(table, query, accessToken) {
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${query}`;
+  return sbHandle(await fetch(url, {
+    method: "DELETE",
+    headers: { ...sbHeaders(accessToken), Prefer: "return=representation" },
+  }));
+}
+
 // Storage bucket that holds vehicle listing photos. Must exist in the
 // Supabase project (created via SQL/dashboard) with public read access.
 const VEHICLE_PHOTOS_BUCKET = "vehicle-photos";
@@ -693,14 +701,13 @@ const AREA_COORDS = {
   "Havannah Harbour": { x: 175, y: 100 },
 };
 
-// Mock existing bookings per vehicle, used to simulate real availability conflicts.
-// Dates are generated relative to "today" so the demo stays realistic regardless of when it's viewed.
+// Returns today (or n days from today) as an ISO date string, used as the
+// `min` attribute on date pickers so past dates can't be selected.
 function daysFromNow(n) {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-const INITIAL_BOOKINGS = [];
 
 function rangesOverlap(aFrom, aTo, bFrom, bTo) {
   return aFrom <= bTo && bFrom <= aTo;
@@ -879,29 +886,6 @@ function AuthModal({ onClose }) {
         </div>
       </div>
     </div>
-  );
-}
-
-const BookingsContext = createContext(null);
-
-function useBookings() {
-  return useContext(BookingsContext);
-}
-
-function BookingsProvider({ children }) {
-  const [bookings, setBookings] = useState(INITIAL_BOOKINGS);
-
-  const blockDate = (vehicleId, dateStr) => {
-    setBookings((prev) => [...prev, { id: "blk-" + Math.random().toString(36).slice(2, 8), vehicleId, from: dateStr, to: dateStr, source: "supplier" }]);
-  };
-  const unblockDate = (id) => {
-    setBookings((prev) => prev.filter((b) => b.id !== id));
-  };
-
-  return (
-    <BookingsContext.Provider value={{ bookings, blockDate, unblockDate }}>
-      {children}
-    </BookingsContext.Provider>
   );
 }
 
@@ -1930,7 +1914,20 @@ function CustomerReview({ supplier, onSubmit }) {
 function BookingModal({ v, onClose }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
-  const { bookings } = useBookings();
+  const [vehicleBookings, setVehicleBookings] = useState([]);
+  // Real, currently-taken date ranges for this vehicle, so the date picker
+  // can warn about conflicts before a customer sends a request.
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED) return;
+    let cancelled = false;
+    sbSelect("bookings", { select: "date_from,date_to", query: `&vehicle_id=eq.${v.id}&status=in.(pending,accepted)` })
+      .then((rows) => {
+        if (cancelled) return;
+        setVehicleBookings(rows.map((r) => ({ vehicleId: v.id, from: r.date_from, to: r.date_to })));
+      })
+      .catch((e) => console.error("Availability check failed:", e.message));
+    return () => { cancelled = true; };
+  }, [v.id]);
   const [step, setStep] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [dates, setDates] = useState({ from: "", to: "" });
@@ -1950,8 +1947,8 @@ function BookingModal({ v, onClose }) {
   const returnTime = returnDone
     ? new Date(Math.max(...Object.values(checklist.return).map((p) => p.time.getTime())))
     : null;
-  const unavailableRanges = useMemo(() => getUnavailableRanges(bookings, v.id), [bookings, v.id]);
-  const hasConflict = dates.from && dates.to && !isRangeAvailable(bookings, v.id, dates.from, dates.to);
+  const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
+  const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
 
   const closeChecklist = (mode, photos) => {
     setChecklist((c) => ({ ...c, [mode]: photos }));
@@ -2833,8 +2830,34 @@ function DisputeCard({ d, onRespond, onResolve }) {
 
 function AvailabilityCalendar({ vehicleId }) {
   const { t } = useLang();
-  const { bookings, blockDate, unblockDate } = useBookings();
+  const { user, accessToken } = useAuth();
   const [monthOffset, setMonthOffset] = useState(0);
+  const [ranges, setRanges] = useState([]); // { id, from, to, source: "customer" | "supplier" }
+  const [loading, setLoading] = useState(true);
+
+  // Pulls both real customer bookings and this supplier's own blocked
+  // dates for the selected vehicle, so the calendar reflects what's
+  // actually in Supabase rather than in-memory-only state.
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !user || !vehicleId) { setLoading(false); return; }
+    let cancelled = false;
+    setRanges([]);
+    setLoading(true);
+    Promise.all([
+      sbSelect("bookings", { select: "id,date_from,date_to", query: `&vehicle_id=eq.${vehicleId}&status=in.(pending,accepted)`, accessToken }),
+      sbSelect("supplier_blocks", { select: "id,date_from,date_to", query: `&vehicle_id=eq.${vehicleId}`, accessToken }),
+    ])
+      .then(([bookingRows, blockRows]) => {
+        if (cancelled) return;
+        setRanges([
+          ...bookingRows.map((b) => ({ id: b.id, from: b.date_from, to: b.date_to, source: "customer" })),
+          ...blockRows.map((b) => ({ id: b.id, from: b.date_from, to: b.date_to, source: "supplier" })),
+        ]);
+      })
+      .catch((e) => console.error("Availability fetch failed:", e.message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [vehicleId, user, accessToken]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -2848,16 +2871,40 @@ function AvailabilityCalendar({ vehicleId }) {
   const weekdays = t("supplier.weekdays");
   const monthLabel = `${months[month]} ${year}`;
 
-  const vehicleBookings = bookings.filter((b) => b.vehicleId === vehicleId);
-  const dayStatus = (dateStr) => vehicleBookings.find((b) => dateStr >= b.from && dateStr <= b.to) || null;
+  const dayStatus = (dateStr) => ranges.find((b) => dateStr >= b.from && dateStr <= b.to) || null;
 
   const cells = [];
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  const blockDate = async (dateStr) => {
+    if (!SUPABASE_CONFIGURED || !user) return;
+    const tempId = "tmp-" + dateStr;
+    setRanges((prev) => [...prev, { id: tempId, from: dateStr, to: dateStr, source: "supplier" }]);
+    try {
+      const rows = await sbInsert("supplier_blocks", [{ vehicle_id: vehicleId, date_from: dateStr, date_to: dateStr, created_by: user.id }], accessToken);
+      setRanges((prev) => prev.map((r) => (r.id === tempId ? { ...r, id: rows[0].id } : r)));
+    } catch (e) {
+      console.error("Blocking date failed:", e.message);
+      setRanges((prev) => prev.filter((r) => r.id !== tempId));
+    }
+  };
+
+  const unblockDate = async (id) => {
+    const prevRanges = ranges;
+    setRanges((prev) => prev.filter((r) => r.id !== id));
+    if (!SUPABASE_CONFIGURED || String(id).startsWith("tmp-")) return;
+    try {
+      await sbDelete("supplier_blocks", `id=eq.${id}`, accessToken);
+    } catch (e) {
+      console.error("Unblocking date failed:", e.message);
+      setRanges(prevRanges);
+    }
+  };
+
   const handleClick = (dateStr, status) => {
     if (dateStr < todayStr) return;
-    if (!status) { blockDate(vehicleId, dateStr); return; }
+    if (!status) { blockDate(dateStr); return; }
     if (status.source === "supplier") unblockDate(status.id);
   };
 
@@ -4140,11 +4187,9 @@ export default function App() {
   return (
     <LangProvider>
       <AuthProvider>
-        <BookingsProvider>
-          <SupplierAuthProvider>
-            <AppInner />
-          </SupplierAuthProvider>
-        </BookingsProvider>
+        <SupplierAuthProvider>
+          <AppInner />
+        </SupplierAuthProvider>
       </AuthProvider>
     </LangProvider>
   );
