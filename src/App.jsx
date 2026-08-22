@@ -3324,7 +3324,7 @@ function SupplierDashboard({ onOpenAuth }) {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
       const path = `${profile.user_id}/${vehicleId}.${ext}`;
       const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
-      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_url: url }, accessToken);
+      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: [url] }, accessToken);
       setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrl: url } : v)));
     } catch (e) {
       // Keep the local preview showing even if the upload failed — the
@@ -3379,7 +3379,7 @@ function SupplierDashboard({ onOpenAuth }) {
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
-          photoUrl: r.photo_url || null,
+          photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
         }));
         setMyVehicles(mapped);
         setCalendarVehicleId((prev) => prev && mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id);
@@ -3507,7 +3507,7 @@ function SupplierDashboard({ onOpenAuth }) {
             const ext = (vehicle.photoFile.name.split(".").pop() || "jpg").toLowerCase();
             const path = `${profile.user_id}/${r.id}.${ext}`;
             photoUrl = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, vehicle.photoFile, accessToken);
-            await sbUpdate("vehicles", `id=eq.${r.id}`, { photo_url: photoUrl }, accessToken);
+            await sbUpdate("vehicles", `id=eq.${r.id}`, { photo_urls: [photoUrl] }, accessToken);
           } catch (e) {
             // Photo upload failing shouldn't block the listing itself —
             // the vehicle is already saved, just without a photo.
@@ -3802,7 +3802,7 @@ function AppInner() {
     let cancelled = false;
     setVehiclesLoading(true);
     sbSelect("vehicles", {
-      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_url,supplier_id,suppliers(business_name,phone)",
+      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
     })
       .then((rows) => {
         if (cancelled) return;
@@ -3814,7 +3814,7 @@ function AppInner() {
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
-          photoUrl: r.photo_url || null,
+          photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
         })));
       })
       .catch((e) => !cancelled && setVehiclesError(e.message))
