@@ -97,6 +97,29 @@ async function sbUpdate(table, query, patch, accessToken) {
   }));
 }
 
+// Storage bucket that holds vehicle listing photos. Must exist in the
+// Supabase project (created via SQL/dashboard) with public read access.
+const VEHICLE_PHOTOS_BUCKET = "vehicle-photos";
+
+// Uploads a single file to a Supabase Storage bucket and returns its public
+// URL. Path should be unique per object (we namespace by user id + vehicle
+// id) so re-uploads don't collide across suppliers.
+async function sbUploadFile(bucket, path, file, accessToken) {
+  const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken || SUPABASE_ANON_KEY}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "x-upsert": "true",
+    },
+    body: file,
+  });
+  await sbHandle(res);
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
 async function sbRpc(fn, args, accessToken) {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fn}`;
   return sbHandle(await fetch(url, {
@@ -305,7 +328,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       reviewsFromCustomers: "Reviews from customers",
-      yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending",
+      yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
       statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined",
       openDisputes: "Reported issues", noDisputes: "No disputes — nothing to see here.",
@@ -342,7 +365,7 @@ const STRINGS = {
       pricePerDay: "Price per day (VUV)",
       depositPolicy: "Deposit policy", noDeposit: "No deposit", depositRequired: "Deposit required",
       depositAmount: "Deposit amount (VUV, refundable)",
-      photoNote: "Photo upload isn't wired up in this prototype yet — for now, vehicles get a colour-coded icon based on type.",
+      photoNote: "This supplier hasn't added photos yet — shown here with a colour-coded icon instead.",
       reviewListing: "Review listing", publish: "Publish listing",
       previewNote: "This is how customers will see it. New listings are marked pending until you've completed verification.",
     },
@@ -515,7 +538,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       reviewsFromCustomers: "Avis des clients",
-      yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente",
+      yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
       statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée",
       openDisputes: "Problèmes signalés", noDisputes: "Aucun litige — rien à signaler ici.",
@@ -552,7 +575,7 @@ const STRINGS = {
       pricePerDay: "Prix par jour (VUV)",
       depositPolicy: "Politique de caution", noDeposit: "Sans caution", depositRequired: "Caution requise",
       depositAmount: "Montant de la caution (VUV, remboursable)",
-      photoNote: "L'ajout de photos n'est pas encore activé dans ce prototype — les véhicules reçoivent pour l'instant une icône colorée selon leur type.",
+      photoNote: "Ce loueur n'a pas encore ajouté de photos — affiché ici avec une icône colorée à la place.",
       reviewListing: "Vérifier l'annonce", publish: "Publier l'annonce",
       previewNote: "Voici comment les clients la verront. Les nouvelles annonces sont marquées en attente jusqu'à la vérification.",
     },
@@ -1273,8 +1296,12 @@ function VehicleCard({ v, onSelect, compareIds, onToggleCompare }) {
       className="text-left rounded-2xl overflow-hidden transition-transform hover:-translate-y-0.5 cursor-pointer"
       style={{ backgroundColor: C.sand, border: `1px solid ${inCompare ? C.lagoon : C.lineDark}` }}
     >
-      <div className="h-32 flex items-center justify-center relative" style={{ backgroundColor: meta.color }}>
-        <Icon size={44} color="rgba(255,255,255,0.92)" strokeWidth={1.5} />
+      <div className="h-32 flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: meta.color }}>
+        {v.photoUrl ? (
+          <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
+        ) : (
+          <Icon size={44} color="rgba(255,255,255,0.92)" strokeWidth={1.5} />
+        )}
         <div className="absolute top-2.5 left-2.5 flex flex-col items-start gap-1.5">
           {onToggleCompare && (
             <button
@@ -1403,8 +1430,12 @@ function VehicleDetail({ v, onClose, onBook, idVerified }) {
         className="w-full md:w-[440px] h-full overflow-y-auto"
         style={{ backgroundColor: C.sand }}
       >
-        <div className="h-44 flex items-center justify-center relative" style={{ backgroundColor: meta.color }}>
-          <Icon size={64} color="rgba(255,255,255,0.92)" strokeWidth={1.4} />
+        <div className="h-44 flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: meta.color }}>
+          {v.photoUrl ? (
+            <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
+          ) : (
+            <Icon size={64} color="rgba(255,255,255,0.92)" strokeWidth={1.4} />
+          )}
           <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
             <X size={16} color="#fff" />
           </button>
@@ -1448,12 +1479,14 @@ function VehicleDetail({ v, onClose, onBook, idVerified }) {
             </p>
           </div>
 
-          <div className="rounded-xl p-4 mt-3 flex items-start gap-2.5" style={{ backgroundColor: "#fff", border: `1px solid ${C.lineDark}` }}>
-            <Camera size={16} color={C.inkSoft} className="mt-0.5 shrink-0" />
-            <p style={{ ...body, fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
-              {t("detail.photoNote")}
-            </p>
-          </div>
+          {!v.photoUrl && (
+            <div className="rounded-xl p-4 mt-3 flex items-start gap-2.5" style={{ backgroundColor: "#fff", border: `1px solid ${C.lineDark}` }}>
+              <Camera size={16} color={C.inkSoft} className="mt-0.5 shrink-0" />
+              <p style={{ ...body, fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
+                {t("detail.photoNote")}
+              </p>
+            </div>
+          )}
 
           <div className="mt-6 pt-5 flex items-end justify-between" style={{ borderTop: `1px solid ${C.lineDark}` }}>
             <div>
@@ -2307,9 +2340,15 @@ function AddVehicleModal({ onClose, onAdd }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: "", type: "car", seats: "", trans: "Auto", fuel: "Petrol", area: "Port Vila", airport: false,
-    price: "", depositOn: false, depositAmount: "",
+    price: "", depositOn: false, depositAmount: "", photoFile: null, photoPreview: null,
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
+
+  const handlePhoto = async (file) => {
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    setForm((f) => ({ ...f, photoFile: file, photoPreview: dataUrl }));
+  };
 
   const step0Valid = form.name.trim() && form.seats;
   const step1Valid = form.price && (!form.depositOn || form.depositAmount);
@@ -2330,6 +2369,8 @@ function AddVehicleModal({ onClose, onAdd }) {
       fuel: form.fuel,
       airport: form.airport,
       area: form.area,
+      photoFile: form.photoFile,
+      photoPreview: form.photoPreview,
     });
   };
 
@@ -3233,8 +3274,33 @@ function SupplierDashboard({ onOpenAuth }) {
   const [disputesLoading, setDisputesLoading] = useState(false);
   const [disputesError, setDisputesError] = useState("");
   const [calendarVehicleId, setCalendarVehicleId] = useState(null);
+  const [photoUploadingId, setPhotoUploadingId] = useState(null);
 
   const usingRealData = SUPABASE_CONFIGURED && !!profile;
+
+  // Lets a supplier add or replace a photo on a listing that already
+  // exists (e.g. one created before photo upload existed, or a retake).
+  // Shows the picked file immediately via a data URL, then swaps it for
+  // the real Storage URL once the upload finishes.
+  const handlePhotoChange = async (vehicleId, file) => {
+    if (!file || !usingRealData) return;
+    const preview = await fileToDataUrl(file);
+    setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrl: preview } : v)));
+    setPhotoUploadingId(vehicleId);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${profile.user_id}/${vehicleId}.${ext}`;
+      const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
+      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_url: url }, accessToken);
+      setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrl: url } : v)));
+    } catch (e) {
+      // Keep the local preview showing even if the upload failed — the
+      // supplier can retry; we just log so it's visible while debugging.
+      console.error("Vehicle photo upload failed:", e.message);
+    } finally {
+      setPhotoUploadingId(null);
+    }
+  };
 
   // Real disputes raised against this supplier's bookings.
   useEffect(() => {
@@ -3280,6 +3346,7 @@ function SupplierDashboard({ onOpenAuth }) {
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
+          photoUrl: r.photo_url || null,
         }));
         setMyVehicles(mapped);
         setCalendarVehicleId((prev) => prev && mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id);
@@ -3401,11 +3468,25 @@ function SupplierDashboard({ onOpenAuth }) {
           area: vehicle.area,
         }], accessToken);
         const r = rows[0];
+        let photoUrl = null;
+        if (vehicle.photoFile) {
+          try {
+            const ext = (vehicle.photoFile.name.split(".").pop() || "jpg").toLowerCase();
+            const path = `${profile.user_id}/${r.id}.${ext}`;
+            photoUrl = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, vehicle.photoFile, accessToken);
+            await sbUpdate("vehicles", `id=eq.${r.id}`, { photo_url: photoUrl }, accessToken);
+          } catch (e) {
+            // Photo upload failing shouldn't block the listing itself —
+            // the vehicle is already saved, just without a photo.
+            console.error("Vehicle photo upload failed:", e.message);
+          }
+        }
         const mapped = {
           id: r.id, name: r.name, type: r.type, supplier: profile.business_name,
           verified: r.verified, rating: 0, reviews: 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
+          photoUrl,
         };
         setMyVehicles((prev) => [mapped, ...prev]);
         setCalendarVehicleId((prev) => prev || mapped.id);
@@ -3415,7 +3496,7 @@ function SupplierDashboard({ onOpenAuth }) {
         return;
       }
     } else {
-      setMyVehicles([vehicle, ...myVehicles]);
+      setMyVehicles([{ ...vehicle, photoUrl: vehicle.photoPreview || null }, ...myVehicles]);
     }
     setShowAdd(false);
     setJustAdded(vehicle.name);
@@ -3559,22 +3640,47 @@ function SupplierDashboard({ onOpenAuth }) {
             {myVehicles.length === 0 && !vehiclesLoading && (
               <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
             )}
-            {myVehicles.map((v) => (
-              <div key={v.id} className="rounded-xl p-3.5 flex items-center justify-between" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <div style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13.5 }}>{v.name}</div>
-                    {!v.verified && v.reviews === 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[9px]" style={{ ...body, fontWeight: 600, backgroundColor: "rgba(229,106,62,0.18)", color: C.coralSoft }}>
-                        {t("supplier.pending")}
-                      </span>
+            {myVehicles.map((v) => {
+              const meta = TYPE_META[v.type];
+              const Icon = meta.icon;
+              const uploading = photoUploadingId === v.id;
+              return (
+                <div key={v.id} className="rounded-xl p-3.5 flex items-center gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+                  <label
+                    className="w-11 h-11 rounded-lg relative overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
+                    style={{ backgroundColor: meta.color }}
+                    title={t("supplier.changePhoto")}
+                  >
+                    {v.photoUrl ? (
+                      <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Icon size={17} color="rgba(255,255,255,0.92)" strokeWidth={1.5} />
                     )}
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
+                      {uploading ? <Loader2 size={13} color="#fff" className="animate-spin" /> : <Camera size={13} color="#fff" />}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handlePhotoChange(v.id, e.target.files && e.target.files[0])}
+                    />
+                  </label>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <div style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13.5 }}>{v.name}</div>
+                      {!v.verified && v.reviews === 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px]" style={{ ...body, fontWeight: 600, backgroundColor: "rgba(229,106,62,0.18)", color: C.coralSoft }}>
+                          {t("supplier.pending")}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ ...body, color: C.mist, opacity: 0.65, fontSize: 12 }}>{fmtVUV(v.price)} {t("card.perDay")} · {v.deposit ? `${fmtVUV(v.deposit)} ${t("card.deposit")}` : t("card.noDeposit")}</div>
                   </div>
-                  <div style={{ ...body, color: C.mist, opacity: 0.65, fontSize: 12 }}>{fmtVUV(v.price)} {t("card.perDay")} · {v.deposit ? `${fmtVUV(v.deposit)} ${t("card.deposit")}` : t("card.noDeposit")}</div>
+                  <DepositGauge amount={v.deposit} size={28} />
                 </div>
-                <DepositGauge amount={v.deposit} size={28} />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="rounded-xl p-3.5 mt-4" style={{ backgroundColor: C.panelSoft }}>
@@ -3663,7 +3769,7 @@ function AppInner() {
     let cancelled = false;
     setVehiclesLoading(true);
     sbSelect("vehicles", {
-      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,suppliers(business_name)",
+      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_url,suppliers(business_name)",
     })
       .then((rows) => {
         if (cancelled) return;
@@ -3673,6 +3779,7 @@ function AppInner() {
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
+          photoUrl: r.photo_url || null,
         })));
       })
       .catch((e) => !cancelled && setVehiclesError(e.message))
