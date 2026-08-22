@@ -266,7 +266,7 @@ const STRINGS = {
       sendRequest: "Send request",
       requestSent: "Request sent", reference: "Reference",
       supplierWillConfirm: "{supplier} will confirm availability and arrange payment directly with you.",
-      whatsapp: "WhatsApp", call: "Call",
+      whatsapp: "WhatsApp", call: "Call", noPhoneOnFile: "This supplier hasn't added a contact number yet — check back in your dashboard for updates.",
       conditionHeader: "VEHICLE CONDITION RECORD",
       pickupPhotos: "Pickup photos", returnPhotos: "Return photos",
       pickupDoneSub: "{total} photos logged", pickupPendingSub: "Take before you drive off · {done}/{total}",
@@ -397,6 +397,7 @@ const STRINGS = {
       pendingBody: "We typically review new suppliers within 1–2 business days. We'll email you once you're approved and your listings go live.",
       pendingFor: "Application for",
       demoNote: "Prototype only — skip the wait to preview the approved dashboard.",
+      realPendingNote: "No action needed on your end — this page will update automatically once you're approved.",
       simulateApproval: "Simulate approval",
       verifiedBadge: "Verified supplier",
     },
@@ -476,7 +477,7 @@ const STRINGS = {
       sendRequest: "Envoyer la demande",
       requestSent: "Demande envoyée", reference: "Référence",
       supplierWillConfirm: "{supplier} confirmera la disponibilité et organisera le paiement directement avec vous.",
-      whatsapp: "WhatsApp", call: "Appeler",
+      whatsapp: "WhatsApp", call: "Appeler", noPhoneOnFile: "Ce loueur n'a pas encore ajouté de numéro de contact — vérifiez les mises à jour dans votre tableau de bord.",
       conditionHeader: "ÉTAT DES LIEUX DU VÉHICULE",
       pickupPhotos: "Photos de départ", returnPhotos: "Photos de retour",
       pickupDoneSub: "{total} photos enregistrées", pickupPendingSub: "À prendre avant de partir · {done}/{total}",
@@ -607,6 +608,7 @@ const STRINGS = {
       pendingBody: "Nous examinons généralement les nouveaux loueurs sous 1 à 2 jours ouvrés. Vous recevrez un e-mail dès l'approbation, et vos annonces seront alors mises en ligne.",
       pendingFor: "Demande pour",
       demoNote: "Prototype uniquement — ignorez l'attente pour prévisualiser le tableau de bord approuvé.",
+      realPendingNote: "Aucune action requise de votre part — cette page se mettra à jour automatiquement dès votre approbation.",
       simulateApproval: "Simuler l'approbation",
       verifiedBadge: "Loueur vérifié",
     },
@@ -1904,16 +1906,21 @@ function CustomerReview({ supplier, onSubmit }) {
 
 function BookingModal({ v, onClose }) {
   const { t } = useLang();
+  const { user, accessToken } = useAuth();
   const { bookings } = useBookings();
   const [step, setStep] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [dates, setDates] = useState({ from: "", to: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [bookingId, setBookingId] = useState(null);
   const [checklist, setChecklist] = useState({ pickup: null, return: null });
   const [activeChecklist, setActiveChecklist] = useState(null);
   const [review, setReview] = useState(null);
   const [dispute, setDispute] = useState(null);
   const [disputeModalOpen, setDisputeModalOpen] = useState(false);
   const ref = useMemo(() => "EFR-" + Math.random().toString(36).slice(2, 8).toUpperCase(), []);
+  const waDigits = (v.phone || "").replace(/[^0-9]/g, "");
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
@@ -1928,6 +1935,74 @@ function BookingModal({ v, onClose }) {
     setActiveChecklist(null);
     if (mode === "pickup" && Object.keys(photos).length === CHECK_ITEMS.length && step < 3) setStep(3);
     if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length && step < 4) setStep(4);
+  };
+
+  // Creates the real booking row when the customer sends their request.
+  // Requires sign-in (enforced before this modal ever opens) so we always
+  // have a real customer_id to attach it to.
+  const sendRequest = async () => {
+    if (!SUPABASE_CONFIGURED || !user) {
+      // Local/dev fallback when there's no backend to write to.
+      setStep(2);
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const rows = await sbInsert("bookings", [{
+        vehicle_id: v.id,
+        supplier_id: v.supplierId,
+        customer_id: user.id,
+        date_from: dates.from,
+        date_to: dates.to,
+        status: "pending",
+        reference: ref,
+        agreed_no_insurance: agreed,
+      }], accessToken);
+      setBookingId(rows[0].id);
+      setStep(2);
+    } catch (e) {
+      setSubmitError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Reviews and disputes are attached to the real booking. If either write
+  // fails, the UI still shows what the customer submitted (so it doesn't
+  // feel lost) — the failure is only logged, same pattern as photo uploads.
+  const submitReview = async ({ rating, comment }) => {
+    setReview({ rating, comment });
+    if (!SUPABASE_CONFIGURED || !user || !bookingId) return;
+    try {
+      await sbInsert("reviews", [{
+        booking_id: bookingId,
+        author_id: user.id,
+        target_supplier_id: v.supplierId,
+        target_type: "supplier",
+        rating,
+        comment: comment.trim() || null,
+      }], accessToken);
+    } catch (e) {
+      console.error("Review submit failed:", e.message);
+    }
+  };
+
+  const submitDispute = async (d) => {
+    setDispute(d);
+    setDisputeModalOpen(false);
+    if (!SUPABASE_CONFIGURED || !user || !bookingId) return;
+    try {
+      await sbInsert("disputes", [{
+        booking_id: bookingId,
+        raised_by: user.id,
+        category: d.category,
+        description: d.description,
+        status: "open",
+      }], accessToken);
+    } catch (e) {
+      console.error("Dispute submit failed:", e.message);
+    }
   };
 
   return (
@@ -2003,14 +2078,19 @@ function BookingModal({ v, onClose }) {
                 <ChevronLeft size={16} color={C.mist} />
               </button>
               <button
-                disabled={!agreed}
-                onClick={() => setStep(2)}
+                disabled={!agreed || submitting}
+                onClick={sendRequest}
                 className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
                 style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
               >
-                {t("booking.sendRequest")} <ArrowRight size={14} />
+                {submitting ? <Loader2 size={14} className="animate-spin" /> : <>{t("booking.sendRequest")} <ArrowRight size={14} /></>}
               </button>
             </div>
+            {submitError && (
+              <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+                <span style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{submitError}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -2024,18 +2104,24 @@ function BookingModal({ v, onClose }) {
             <p style={{ ...body, color: C.mist, fontSize: 12.5, marginTop: 8, lineHeight: 1.6 }}>
               {t("booking.supplierWillConfirm", { supplier: v.supplier })}
             </p>
-            <div className="flex gap-2 mt-5">
-              <a href={`https://wa.me/6785551021?text=${waMsg}`} target="_blank" rel="noreferrer"
-                className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
-                style={{ ...body, fontWeight: 600, backgroundColor: "#25D366", color: "#fff" }}>
-                <MessageCircle size={15} /> {t("booking.whatsapp")}
-              </a>
-              <a href="tel:+6785551021"
-                className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
-                style={{ ...body, fontWeight: 600, backgroundColor: C.panelSoft, color: C.sand, border: `1px solid ${C.line}` }}>
-                <Phone size={15} /> {t("booking.call")}
-              </a>
-            </div>
+            {waDigits ? (
+              <div className="flex gap-2 mt-5">
+                <a href={`https://wa.me/${waDigits}?text=${waMsg}`} target="_blank" rel="noreferrer"
+                  className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
+                  style={{ ...body, fontWeight: 600, backgroundColor: "#25D366", color: "#fff" }}>
+                  <MessageCircle size={15} /> {t("booking.whatsapp")}
+                </a>
+                <a href={`tel:+${waDigits}`}
+                  className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
+                  style={{ ...body, fontWeight: 600, backgroundColor: C.panelSoft, color: C.sand, border: `1px solid ${C.line}` }}>
+                  <Phone size={15} /> {t("booking.call")}
+                </a>
+              </div>
+            ) : (
+              <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.6, marginTop: 12 }}>
+                {t("booking.noPhoneOnFile")}
+              </p>
+            )}
 
             <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
               <div style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, fontWeight: 600, marginBottom: 10 }}>
@@ -2107,7 +2193,7 @@ function BookingModal({ v, onClose }) {
                   </div>
                 </div>
               ) : (
-                <CustomerReview supplier={v.supplier} onSubmit={setReview} />
+                <CustomerReview supplier={v.supplier} onSubmit={submitReview} />
               )
             )}
 
@@ -2141,7 +2227,7 @@ function BookingModal({ v, onClose }) {
           pickupCount={checklist.pickup ? Object.keys(checklist.pickup).length : 0}
           returnCount={checklist.return ? Object.keys(checklist.return).length : 0}
           onClose={() => setDisputeModalOpen(false)}
-          onSubmit={(d) => { setDispute(d); setDisputeModalOpen(false); }}
+          onSubmit={submitDispute}
         />
       )}
     </div>
@@ -3035,7 +3121,7 @@ function SupplierGate({ onOpenAuth }) {
         )}
         <p style={{ ...body, color: C.mist, opacity: 0.75, fontSize: 13, marginTop: 10, lineHeight: 1.6 }}>{t("kyc.pendingBody")}</p>
 
-        {SUPABASE_CONFIGURED && profile ? (
+        {SUPABASE_CONFIGURED && profile && user && ADMIN_USER_IDS.includes(user.id) ? (
           <div className="rounded-xl p-3.5 mt-6 text-left" style={{ backgroundColor: C.panelSoft }}>
             <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.8, marginBottom: 8, lineHeight: 1.5 }}>
               Real approval happens outside the app (RLS blocks clients from self-approving, by design). To approve this test supplier, run this in the Supabase SQL Editor:
@@ -3051,6 +3137,10 @@ function SupplierGate({ onOpenAuth }) {
             {applyError && (
               <p style={{ ...body, fontSize: 10.5, color: C.hibiscus, marginTop: 8, lineHeight: 1.5 }}>{applyError}</p>
             )}
+          </div>
+        ) : SUPABASE_CONFIGURED && profile ? (
+          <div className="rounded-xl p-3.5 mt-6" style={{ backgroundColor: C.panelSoft }}>
+            <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, lineHeight: 1.5 }}>{t("kyc.realPendingNote")}</p>
           </div>
         ) : (
           <div className="rounded-xl p-3.5 mt-6" style={{ backgroundColor: C.panelSoft }}>
@@ -3332,7 +3422,7 @@ function SupplierDashboard({ onOpenAuth }) {
     if (!usingRealData) return;
     let cancelled = false;
     sbSelect("reviews", {
-      select: "id,rating,comment,created_at,profiles(full_name),bookings(vehicles(name))",
+      select: "id,rating,comment,created_at,profiles!reviews_author_id_fkey(full_name),bookings(vehicles(name))",
       query: `&target_supplier_id=eq.${profile.id}&target_type=eq.supplier&order=created_at.desc`,
       accessToken,
     })
@@ -3685,6 +3775,7 @@ function SupplierDashboard({ onOpenAuth }) {
 
 function AppInner() {
   const { t } = useLang();
+  const { user } = useAuth();
   const [mode, setMode] = useState("renter");
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
@@ -3711,13 +3802,15 @@ function AppInner() {
     let cancelled = false;
     setVehiclesLoading(true);
     sbSelect("vehicles", {
-      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_url,suppliers(business_name)",
+      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_url,supplier_id,suppliers(business_name,phone)",
     })
       .then((rows) => {
         if (cancelled) return;
         setDbVehicles(rows.map((r) => ({
           id: r.id, name: r.name, type: r.type,
+          supplierId: r.supplier_id,
           supplier: (r.suppliers && r.suppliers.business_name) || "—",
+          phone: (r.suppliers && r.suppliers.phone) || "",
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
@@ -3734,13 +3827,30 @@ function AppInner() {
   const handleBookRequest = (v) => {
     setSelected(null);
     setShowCompare(false);
-    if (idVerified) {
+    setPendingVehicle(v);
+    if (SUPABASE_CONFIGURED && !user) {
+      setShowAuth(true);
+    } else if (idVerified) {
       setBooking(v);
+      setPendingVehicle(null);
     } else {
-      setPendingVehicle(v);
       setShowIdModal(true);
     }
   };
+
+  // Once sign-in completes for a booking that was waiting on it, pick up
+  // where handleBookRequest left off (ID check, then the booking modal).
+  useEffect(() => {
+    if (!user || !pendingVehicle) return;
+    setShowAuth(false);
+    if (idVerified) {
+      setBooking(pendingVehicle);
+      setPendingVehicle(null);
+    } else {
+      setShowIdModal(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleVerified = () => {
     setIdVerified(true);
