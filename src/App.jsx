@@ -677,18 +677,6 @@ const AREA_COORDS = {
   "Havannah Harbour": { x: 175, y: 100 },
 };
 
-const VEHICLES = [
-  { id: 1, name: "Toyota RAV4", type: "4x4", supplier: "Vila 4x4 Rentals", verified: true, rating: 4.8, reviews: 62, price: 8500, deposit: 20000, seats: 5, trans: "Auto", fuel: "Petrol", airport: true, phone: "+678 5551 021", area: "Port Vila" },
-  { id: 2, name: "Suzuki Jimny", type: "4x4", supplier: "Island Hopper Rentals", verified: true, rating: 4.6, reviews: 34, price: 7000, deposit: 15000, seats: 4, trans: "Manual", fuel: "Petrol", airport: false, area: "Port Vila" },
-  { id: 3, name: "Honda 125cc Scooter", type: "scooter", supplier: "Vila Scooter Co", verified: true, rating: 4.5, reviews: 51, price: 3000, deposit: 0, seats: 2, trans: "Auto", fuel: "Petrol", airport: false, area: "Port Vila" },
-  { id: 4, name: "Toyota Hiace (10-seat)", type: "van", supplier: "Efate Group Tours", verified: true, rating: 4.9, reviews: 28, price: 15000, deposit: 30000, seats: 10, trans: "Manual", fuel: "Diesel", airport: true, area: "Port Vila" },
-  { id: 5, name: "Nissan X-Trail", type: "car", supplier: "Blue Lagoon Rentals", verified: false, rating: 4.7, reviews: 19, price: 9000, deposit: 0, seats: 5, trans: "Auto", fuel: "Petrol", airport: true, area: "Erakor" },
-  { id: 6, name: "Yamaha Scooter", type: "scooter", supplier: "Port Vila Bike Hire", verified: false, rating: 4.4, reviews: 22, price: 2800, deposit: 0, seats: 1, trans: "Auto", fuel: "Petrol", airport: false, area: "Port Vila" },
-  { id: 7, name: "Yamaha Grizzly 350 Quad", type: "quad", supplier: "Efate Quad Adventures", verified: true, rating: 4.7, reviews: 18, price: 9500, deposit: 20000, seats: 1, trans: "Auto", fuel: "Petrol", airport: false, area: "Mele" },
-  { id: 9, name: "RadRunner E-Bike", type: "ebike", supplier: "Vila E-Bike Hire", verified: false, rating: 4.6, reviews: 29, price: 3500, deposit: 0, seats: 1, trans: "Auto", fuel: "Electric", airport: false, area: "Port Vila" },
-  { id: 8, name: "Mitsubishi Pajero", type: "4x4", supplier: "Efate 4x4 Adventures", verified: true, rating: 4.8, reviews: 41, price: 10000, deposit: 25000, seats: 7, trans: "Auto", fuel: "Diesel", airport: true, area: "Havannah Harbour" },
-];
-
 // Mock existing bookings per vehicle, used to simulate real availability conflicts.
 // Dates are generated relative to "today" so the demo stays realistic regardless of when it's viewed.
 function daysFromNow(n) {
@@ -696,13 +684,7 @@ function daysFromNow(n) {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-const INITIAL_BOOKINGS = [
-  { id: "bk1", vehicleId: 1, from: daysFromNow(2), to: daysFromNow(5), source: "customer" },
-  { id: "bk2", vehicleId: 1, from: daysFromNow(10), to: daysFromNow(12), source: "customer" },
-  { id: "bk3", vehicleId: 2, from: daysFromNow(1), to: daysFromNow(3), source: "customer" },
-  { id: "bk4", vehicleId: 4, from: daysFromNow(6), to: daysFromNow(9), source: "customer" },
-  { id: "bk5", vehicleId: 8, from: daysFromNow(4), to: daysFromNow(7), source: "customer" },
-];
+const INITIAL_BOOKINGS = [];
 
 function rangesOverlap(aFrom, aTo, bFrom, bTo) {
   return aFrom <= bTo && bFrom <= aTo;
@@ -2541,48 +2523,9 @@ function AddVehicleModal({ onClose, onAdd }) {
 
 /* ---------------------------------- supplier dashboard ---------------------------------- */
 
-const REQUESTS = [
-  { id: 1, vehicle: "Toyota RAV4", customer: "L. Bennett", dates: "Aug 9 – 12", status: "pending" },
-  { id: 2, vehicle: "Toyota RAV4", customer: "M. Dubois", dates: "Aug 15 – 17", status: "pending" },
-  { id: 3, vehicle: "Suzuki Jimny", customer: "T. Iaruel", dates: "Aug 6 – 6", status: "accepted" },
-  { id: 4, vehicle: "Suzuki Jimny", customer: "K. Naupa", dates: "Jul 28 – 30", status: "completed", customerRating: null },
-];
-
-const REVIEWS = [
-  { id: 1, customer: "J. Lini", rating: 5, vehicle: "Toyota RAV4", date: "Jul 22", comment: "Smooth pickup, RAV4 was in great shape. Deposit back same day." },
-  { id: 2, customer: "A. Tabi", rating: 4, vehicle: "Suzuki Jimny", date: "Jul 15", comment: "Good little car for the price. Deposit refund took an extra day." },
-];
-
-const DISPUTES = [
-  { id: "DSP-7F2K1", vehicle: "Toyota RAV4", customer: "L. Bennett", category: "Deposit not refunded", description: "It's been 4 days since I returned the RAV4 and I still haven't received my 20,000 VUV deposit back.", status: "open", response: "" },
-];
-
 const COMMISSION_RATE = 0.08;
 
-const INITIAL_INVOICES = [
-  {
-    id: "INV-M2", periodOffset: 2, status: "overdue", dueOffsetDays: -18,
-    items: [
-      { vehicle: "Toyota RAV4", customer: "R. Kalsakau", dates: "6 – 9", gross: 25500 },
-      { vehicle: "Suzuki Jimny", customer: "S. Morel", dates: "12 – 13", gross: 7000 },
-    ],
-  },
-  {
-    id: "INV-M1", periodOffset: 1, status: "paid", paidOffsetDays: -3,
-    items: [
-      { vehicle: "Toyota RAV4", customer: "J. Lini", dates: "20 – 22", gross: 25500 },
-      { vehicle: "Suzuki Jimny", customer: "A. Tabi", dates: "14 – 15", gross: 7000 },
-      { vehicle: "Toyota RAV4", customer: "K. Naupa", dates: "28 – 30", gross: 17000 },
-    ],
-  },
-  {
-    id: "INV-M0", periodOffset: 0, status: "due", dueOffsetDays: 6,
-    items: [
-      { vehicle: "Toyota RAV4", customer: "L. Bennett", dates: "9 – 12", gross: 25500 },
-      { vehicle: "Suzuki Jimny", customer: "T. Iaruel", dates: "6 – 6", gross: 7000 },
-    ],
-  },
-];
+const INITIAL_INVOICES = [];
 
 function invoiceGross(inv) {
   return inv.items.reduce((s, it) => s + it.gross, 0);
@@ -3261,7 +3204,7 @@ function SupplierDashboard({ onOpenAuth }) {
   const { t } = useLang();
   const { accessToken } = useAuth();
   const { status, profile } = useSupplierAuth();
-  const [reqs, setReqs] = useState(REQUESTS);
+  const [reqs, setReqs] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsError, setBookingsError] = useState("");
   const [supplierReviews, setSupplierReviews] = useState([]);
@@ -3270,7 +3213,7 @@ function SupplierDashboard({ onOpenAuth }) {
   const [vehiclesError, setVehiclesError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [justAdded, setJustAdded] = useState(null);
-  const [disputes, setDisputes] = useState(DISPUTES);
+  const [disputes, setDisputes] = useState([]);
   const [disputesLoading, setDisputesLoading] = useState(false);
   const [disputesError, setDisputesError] = useState("");
   const [calendarVehicleId, setCalendarVehicleId] = useState(null);
@@ -3503,7 +3446,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setTimeout(() => setJustAdded(null), 4000);
   };
 
-  const reviewsSource = usingRealData ? supplierReviews : REVIEWS;
+  const reviewsSource = supplierReviews;
   const avgRating = reviewsSource.length
     ? (reviewsSource.reduce((s, r) => s + r.rating, 0) / reviewsSource.length).toFixed(1)
     : "—";
@@ -3757,10 +3700,9 @@ function AppInner() {
   const [showCompare, setShowCompare] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
-  // Live vehicle data from Supabase, once configured — falls back to the
-  // mock VEHICLES array so the prototype keeps working before you connect
-  // a real backend.
-  const [dbVehicles, setDbVehicles] = useState(null);
+  // Live vehicle data from Supabase. There is no mock fallback — until a
+  // supplier lists a real vehicle, the marketplace is genuinely empty.
+  const [dbVehicles, setDbVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(SUPABASE_CONFIGURED);
   const [vehiclesError, setVehiclesError] = useState("");
 
@@ -3787,7 +3729,7 @@ function AppInner() {
     return () => { cancelled = true; };
   }, []);
 
-  const sourceVehicles = SUPABASE_CONFIGURED && dbVehicles ? dbVehicles : VEHICLES;
+  const sourceVehicles = dbVehicles;
 
   const handleBookRequest = (v) => {
     setSelected(null);
