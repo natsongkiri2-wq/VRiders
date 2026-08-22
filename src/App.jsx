@@ -278,6 +278,7 @@ const STRINGS = {
       depositBasis: "{amount} VUV refundable deposit", noDepositBasis: "no-deposit",
       agree: "I acknowledge the deposit terms and that this rental has no insurance cover.",
       sendRequest: "Send request",
+      datesTaken: "{vehicle} is already booked for part of {from} – {to}. Try different dates.",
       requestSent: "Request sent", reference: "Reference",
       supplierWillConfirm: "{supplier} will confirm availability and arrange payment directly with you.",
       whatsapp: "WhatsApp", call: "Call", noPhoneOnFile: "This supplier hasn't added a contact number yet — check back in your dashboard for updates.",
@@ -496,6 +497,7 @@ const STRINGS = {
       depositBasis: "une caution remboursable de {amount} VUV", noDepositBasis: "aucune caution",
       agree: "Je reconnais les conditions de la caution et le fait que cette location ne comprend pas d'assurance.",
       sendRequest: "Envoyer la demande",
+      datesTaken: "{vehicle} est déjà réservé pour une partie de {from} – {to}. Essayez d'autres dates.",
       requestSent: "Demande envoyée", reference: "Référence",
       supplierWillConfirm: "{supplier} confirmera la disponibilité et organisera le paiement directement avec vous.",
       whatsapp: "WhatsApp", call: "Appeler", noPhoneOnFile: "Ce loueur n'a pas encore ajouté de numéro de contact — vérifiez les mises à jour dans votre tableau de bord.",
@@ -1982,7 +1984,11 @@ function BookingModal({ v, onClose }) {
       setBookingId(rows[0].id);
       setStep(2);
     } catch (e) {
-      setSubmitError(e.message);
+      if (/no_overlapping_bookings|exclusion constraint/i.test(e.message)) {
+        setSubmitError(t("booking.datesTaken", { vehicle: v.name, from: fmtDateShort(dates.from), to: fmtDateShort(dates.to) }));
+      } else {
+        setSubmitError(e.message);
+      }
     } finally {
       setSubmitting(false);
     }
