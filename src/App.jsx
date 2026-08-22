@@ -2113,8 +2113,8 @@ function BookingModal({ v, onClose }) {
               </button>
             </div>
             {submitError && (
-              <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-                <span style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{submitError}</span>
+              <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{submitError}</span>
               </div>
             )}
           </div>
