@@ -309,11 +309,12 @@ const STRINGS = {
     },
     deposit: {
       header: "DEPOSIT REFUND TRACKER", none: "No deposit was held for this rental — nothing to refund.",
-      tracking: "Tracking", overdue: "Overdue",
+      tracking: "Tracking", overdue: "Overdue", refunded: "Refunded",
       overdueMsg: "This deposit is {duration} past the usual 48-hour refund window.",
       trackingMsg: "{supplier} usually refunds deposits within 48 hours. About {duration} left.",
+      refundedMsg: "{supplier} marked this deposit as refunded on {date}.",
       flag: "Flag this to Efate Rides", reported: "Reported — we'll follow up with {supplier} on your behalf.",
-      demoNote: "Prototype only — fast-forward to preview states",
+      checkStatus: "Check for updates",
     },
     review: {
       header: "RATE YOUR EXPERIENCE", prompt: "How was renting from {supplier}?",
@@ -361,6 +362,7 @@ const STRINGS = {
       activeListings: "Active listings", pendingRequests: "Pending requests", avgRating: "Avg. rating", monthlyBookings: "This month's bookings",
       bookingRequests: "Booking requests",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
+      markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
@@ -529,11 +531,12 @@ const STRINGS = {
     },
     deposit: {
       header: "SUIVI DU REMBOURSEMENT DE CAUTION", none: "Aucune caution n'a été prélevée pour cette location — rien à rembourser.",
-      tracking: "En cours", overdue: "En retard",
+      tracking: "En cours", overdue: "En retard", refunded: "Remboursée",
       overdueMsg: "Cette caution est en retard de {duration} par rapport au délai habituel de 48 heures.",
       trackingMsg: "{supplier} rembourse généralement les cautions sous 48 heures. Il reste environ {duration}.",
+      refundedMsg: "{supplier} a indiqué avoir remboursé cette caution le {date}.",
       flag: "Signaler à Efate Rides", reported: "Signalé — nous allons faire le suivi avec {supplier} pour vous.",
-      demoNote: "Prototype uniquement — avancez le temps pour voir les différents états",
+      checkStatus: "Vérifier les mises à jour",
     },
     review: {
       header: "ÉVALUEZ VOTRE EXPÉRIENCE", prompt: "Comment s'est passée votre location chez {supplier} ?",
@@ -581,6 +584,7 @@ const STRINGS = {
       activeListings: "Annonces actives", pendingRequests: "Demandes en attente", avgRating: "Note moyenne", monthlyBookings: "Réservations ce mois-ci",
       bookingRequests: "Demandes de réservation",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
+      markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
@@ -1774,17 +1778,16 @@ function fmtDuration(ms) {
   return `${h}h ${m}m`;
 }
 
-function DepositTracker({ deposit, returnTime, supplier, dispute, onFlagIssue }) {
+function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, dispute, onFlagIssue, onCheckStatus, checking }) {
   const { t } = useLang();
-  const [demoHours, setDemoHours] = useState(0);
   const windowHours = 48;
 
   const deadline = new Date(returnTime.getTime() + windowHours * 3600000);
-  const effectiveNow = new Date(Date.now() + demoHours * 3600000);
-  const remainingMs = deadline - effectiveNow;
-  const overdue = remainingMs < 0;
-  const elapsedMs = effectiveNow - returnTime;
-  const pct = Math.min(100, Math.max(0, (elapsedMs / (windowHours * 3600000)) * 100));
+  const now = new Date();
+  const remainingMs = deadline - now;
+  const overdue = !depositRefundedAt && remainingMs < 0;
+  const elapsedMs = now - returnTime;
+  const pct = depositRefundedAt ? 100 : Math.min(100, Math.max(0, (elapsedMs / (windowHours * 3600000)) * 100));
 
   return (
     <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
@@ -1801,7 +1804,12 @@ function DepositTracker({ deposit, returnTime, supplier, dispute, onFlagIssue })
         <div className="rounded-xl p-4" style={{ backgroundColor: overdue ? "#3A1E1E" : C.panelSoft, border: `1px solid ${overdue ? C.hibiscus : C.line}` }}>
           <div className="flex items-center justify-between">
             <span style={{ ...mono, fontSize: 17, color: C.sand }}>{fmtVUV(deposit)} VUV</span>
-            {overdue ? (
+            {depositRefundedAt ? (
+              <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.18)" }}>
+                <Check size={11} color={C.lagoon} />
+                <span style={{ ...body, fontSize: 10, fontWeight: 600, color: C.lagoon }}>{t("deposit.refunded")}</span>
+              </span>
+            ) : overdue ? (
               <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(217,82,122,0.2)" }}>
                 <AlertTriangle size={11} color={C.hibiscus} />
                 <span style={{ ...body, fontSize: 10, fontWeight: 600, color: C.hibiscus }}>{t("deposit.overdue")}</span>
@@ -1815,16 +1823,18 @@ function DepositTracker({ deposit, returnTime, supplier, dispute, onFlagIssue })
           </div>
 
           <div className="h-1.5 rounded-full mt-3" style={{ backgroundColor: C.void }}>
-            <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: overdue ? C.hibiscus : C.lagoon, transition: "width 0.25s ease" }} />
+            <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: depositRefundedAt ? C.lagoon : overdue ? C.hibiscus : C.lagoon, transition: "width 0.25s ease" }} />
           </div>
 
           <p style={{ ...body, fontSize: 12, color: C.mist, marginTop: 8, lineHeight: 1.5 }}>
-            {overdue
-              ? t("deposit.overdueMsg", { duration: fmtDuration(remainingMs) })
-              : t("deposit.trackingMsg", { supplier, duration: fmtDuration(remainingMs) })}
+            {depositRefundedAt
+              ? t("deposit.refundedMsg", { supplier, date: new Date(depositRefundedAt).toLocaleDateString() })
+              : overdue
+                ? t("deposit.overdueMsg", { duration: fmtDuration(remainingMs) })
+                : t("deposit.trackingMsg", { supplier, duration: fmtDuration(remainingMs) })}
           </p>
 
-          {overdue && !dispute && (
+          {overdue && !dispute && !depositRefundedAt && (
             <button onClick={onFlagIssue}
               className="w-full mt-3 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
               style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>
@@ -1840,13 +1850,14 @@ function DepositTracker({ deposit, returnTime, supplier, dispute, onFlagIssue })
             </div>
           )}
 
-          <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px dashed ${C.line}` }}>
-            <span style={{ ...body, fontSize: 9.5, color: C.mist, opacity: 0.5 }}>{t("deposit.demoNote")}</span>
-            <div className="flex gap-1">
-              <button onClick={() => setDemoHours((h) => h + 24)} className="px-2 py-1 rounded text-[10px]" style={{ ...body, color: C.mist, border: `1px solid ${C.line}` }}>+24h</button>
-              <button onClick={() => setDemoHours(0)} className="px-2 py-1 rounded text-[10px]" style={{ ...body, color: C.mist, border: `1px solid ${C.line}` }}>Reset</button>
-            </div>
-          </div>
+          {!depositRefundedAt && onCheckStatus && (
+            <button onClick={onCheckStatus} disabled={checking}
+              className="w-full mt-3 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+              style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+              {checking ? <Loader2 size={12} className="animate-spin" /> : null}
+              {t("deposit.checkStatus")}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1985,9 +1996,28 @@ function BookingModal({ v, onClose }) {
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
+  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null });
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  // Prefer the real, persisted return timestamp so the 48h countdown
+  // survives a page refresh; only fall back to the local photo timestamps
+  // if that hasn't loaded yet (or there's no backend to load it from).
   const returnTime = returnDone
-    ? new Date(Math.max(...Object.values(checklist.return).map((p) => p.time.getTime())))
+    ? depositInfo.returnCompletedAt
+      ? new Date(depositInfo.returnCompletedAt)
+      : new Date(Math.max(...Object.values(checklist.return).map((p) => p.time.getTime())))
     : null;
+  const checkDepositStatus = async () => {
+    if (!SUPABASE_CONFIGURED || !bookingId) return;
+    setCheckingStatus(true);
+    try {
+      const rows = await sbSelect("bookings", { select: "return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
+      if (rows[0]) setDepositInfo({ returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at });
+    } catch (e) {
+      console.error("Checking deposit status failed:", e.message);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
   const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
   const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
 
@@ -2013,6 +2043,11 @@ function BookingModal({ v, onClose }) {
       }
       if (rows.length) {
         await sbInsert("booking_photos", rows, accessToken);
+      }
+      if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length) {
+        const nowIso = new Date().toISOString();
+        await sbUpdate("bookings", `id=eq.${bookingId}`, { return_completed_at: nowIso }, accessToken);
+        setDepositInfo((d) => ({ ...d, returnCompletedAt: nowIso }));
       }
     }
     setChecklist((c) => ({ ...c, [mode]: photos }));
@@ -2262,7 +2297,18 @@ function BookingModal({ v, onClose }) {
               </p>
             </div>
 
-            {returnDone && <DepositTracker deposit={v.deposit} returnTime={returnTime} supplier={v.supplier} dispute={dispute} onFlagIssue={() => setDisputeModalOpen(true)} />}
+            {returnDone && (
+              <DepositTracker
+                deposit={v.deposit}
+                returnTime={returnTime}
+                depositRefundedAt={depositInfo.depositRefundedAt}
+                supplier={v.supplier}
+                dispute={dispute}
+                onFlagIssue={() => setDisputeModalOpen(true)}
+                onCheckStatus={checkDepositStatus}
+                checking={checkingStatus}
+              />
+            )}
 
             {returnDone && (
               review ? (
@@ -3574,7 +3620,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsLoading(true);
     setBookingsError("");
     sbSelect("bookings", {
-      select: "id,status,date_from,date_to,created_at,vehicles(name),profiles(full_name,phone)",
+      select: "id,status,date_from,date_to,created_at,deposit_refunded_at,vehicles(name),profiles(full_name,phone)",
       query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
       accessToken,
     })
@@ -3588,6 +3634,7 @@ function SupplierDashboard({ onOpenAuth }) {
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
           status: r.status,
           created_at: r.created_at,
+          depositRefundedAt: r.deposit_refunded_at,
           customerRating: null,
         })));
       })
@@ -3635,6 +3682,22 @@ function SupplierDashboard({ onOpenAuth }) {
     setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
   };
   const rateCustomer = (id, rating) => setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
+  const [refundingId, setRefundingId] = useState(null);
+  const markDepositRefunded = async (id) => {
+    if (!usingRealData) return;
+    setRefundingId(id);
+    const prev = reqs;
+    const nowIso = new Date().toISOString();
+    setReqs(reqs.map((r) => (r.id === id ? { ...r, depositRefundedAt: nowIso } : r)));
+    try {
+      await sbUpdate("bookings", `id=eq.${id}`, { deposit_refunded_at: nowIso }, accessToken);
+    } catch (e) {
+      setReqs(prev);
+      setBookingsError(e.message);
+    } finally {
+      setRefundingId(null);
+    }
+  };
   const respondDispute = async (id, response) => {
     if (usingRealData) {
       const prev = disputes;
@@ -3820,6 +3883,25 @@ function SupplierDashboard({ onOpenAuth }) {
                       style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
                       <Phone size={11} /> {t("booking.call")}
                     </a>
+                  </div>
+                )}
+                {r.status === "accepted" && (
+                  <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    {r.depositRefundedAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <Check size={12} color={C.lagoon} />
+                        <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.75 }}>
+                          {t("supplier.depositRefundedOn", { date: new Date(r.depositRefundedAt).toLocaleDateString() })}
+                        </span>
+                      </div>
+                    ) : (
+                      <button onClick={() => markDepositRefunded(r.id)} disabled={refundingId === r.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
+                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
+                        {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
+                        {t("supplier.markDepositRefunded")}
+                      </button>
+                    )}
                   </div>
                 )}
                 {r.status === "completed" && (
