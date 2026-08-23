@@ -120,6 +120,12 @@ const VEHICLE_PHOTOS_BUCKET = "vehicle-photos";
 // viewer for it yet).
 const KYC_DOCUMENTS_BUCKET = "kyc-documents";
 
+// Storage bucket that holds pickup/return condition-check photos. Private,
+// scoped by RLS to the two people who share a booking (the customer who
+// made it and the supplier who owns the vehicle) — confirmed to already
+// exist in the Supabase project.
+const BOOKING_PHOTOS_BUCKET = "booking-photos";
+
 // Uploads a single file to a Supabase Storage bucket and returns its public
 // URL. Path should be unique per object (we namespace by user id + vehicle
 // id) so re-uploads don't collide across suppliers.
@@ -323,6 +329,7 @@ const STRINGS = {
       notesPlaceholder: "e.g. small scratch on rear bumper, already there at pickup",
       saveIncomplete: "Capture all {total} photos to save",
       saveReady: "Save condition record",
+      saving: "Saving photos...",
     },
     id: {
       title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — this is saved to your account, not just this device.",
@@ -542,6 +549,7 @@ const STRINGS = {
       notesPlaceholder: "ex. petite rayure à l'arrière, déjà présente au départ",
       saveIncomplete: "Prenez les {total} photos pour enregistrer",
       saveReady: "Enregistrer l'état des lieux",
+      saving: "Enregistrement des photos...",
     },
     id: {
       title: "Vérifiez votre permis", subtitle: "Vérification unique pour rassurer les loueurs — enregistrée sur votre compte, pas seulement sur cet appareil.",
@@ -1651,6 +1659,8 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
   const { t } = useLang();
   const [photos, setPhotos] = useState(initialPhotos || {});
   const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const done = Object.keys(photos).length;
   const total = CHECK_ITEMS.length;
   const itemLabels = t("checklist.items");
@@ -1658,7 +1668,18 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
   const capture = async (id, file) => {
     if (!file) return;
     const dataUrl = await fileToDataUrl(file);
-    setPhotos((p) => ({ ...p, [id]: { dataUrl, time: new Date() } }));
+    setPhotos((p) => ({ ...p, [id]: { dataUrl, file, time: new Date() } }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(photos, note);
+    } catch (e) {
+      setSaveError(e.message);
+      setSaving(false);
+    }
   };
 
   return (
@@ -1726,13 +1747,20 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
           />
         </div>
 
+        {saveError && (
+          <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+            <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{saveError}</span>
+          </div>
+        )}
+
         <button
-          disabled={done < total}
-          onClick={() => onSave(photos)}
+          disabled={done < total || saving}
+          onClick={handleSave}
           className="w-full mt-5 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
           style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}
         >
-          <Check size={15} /> {done < total ? t("checklist.saveIncomplete", { total }) : t("checklist.saveReady")}
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+          {saving ? t("checklist.saving") : done < total ? t("checklist.saveIncomplete", { total }) : t("checklist.saveReady")}
         </button>
       </div>
     </div>
@@ -1963,7 +1991,30 @@ function BookingModal({ v, onClose }) {
   const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
   const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
 
-  const closeChecklist = (mode, photos) => {
+  // Uploads each captured photo to Storage and logs it in booking_photos.
+  // Throws on failure so the checklist's Save button can show the error
+  // and let the customer retry, instead of silently losing the photos.
+  const closeChecklist = async (mode, photos, note) => {
+    if (SUPABASE_CONFIGURED && user && bookingId) {
+      const rows = [];
+      for (const item of CHECK_ITEMS) {
+        const shot = photos[item.id];
+        if (!shot || !shot.file) continue;
+        const ext = (shot.file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${bookingId}/${mode}-${item.id}.${ext}`;
+        await sbUploadFile(BOOKING_PHOTOS_BUCKET, path, shot.file, accessToken);
+        rows.push({
+          booking_id: bookingId,
+          stage: mode,
+          item_key: item.id,
+          photo_url: path,
+          taken_at: shot.time.toISOString(),
+        });
+      }
+      if (rows.length) {
+        await sbInsert("booking_photos", rows, accessToken);
+      }
+    }
     setChecklist((c) => ({ ...c, [mode]: photos }));
     setActiveChecklist(null);
     if (mode === "pickup" && Object.keys(photos).length === CHECK_ITEMS.length && step < 3) setStep(3);
@@ -2253,7 +2304,7 @@ function BookingModal({ v, onClose }) {
           vehicleName={v.name}
           initialPhotos={checklist[activeChecklist] || {}}
           onClose={() => setActiveChecklist(null)}
-          onSave={(photos) => closeChecklist(activeChecklist, photos)}
+          onSave={(photos, note) => closeChecklist(activeChecklist, photos, note)}
         />
       )}
 
