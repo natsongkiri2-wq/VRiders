@@ -363,6 +363,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
+      markRentalComplete: "Mark rental complete",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
@@ -585,6 +586,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
+      markRentalComplete: "Marquer la location comme terminée",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
@@ -3516,7 +3518,7 @@ function AdminDashboard() {
 
 function SupplierDashboard({ onOpenAuth }) {
   const { t } = useLang();
-  const { accessToken } = useAuth();
+  const { user, accessToken } = useAuth();
   const { status, profile } = useSupplierAuth();
   const [reqs, setReqs] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
@@ -3619,29 +3621,39 @@ function SupplierDashboard({ onOpenAuth }) {
     let cancelled = false;
     setBookingsLoading(true);
     setBookingsError("");
-    sbSelect("bookings", {
-      select: "id,status,date_from,date_to,created_at,deposit_refunded_at,vehicles(name),profiles(full_name,phone)",
-      query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
-      accessToken,
-    })
-      .then((rows) => {
+    Promise.all([
+      sbSelect("bookings", {
+        select: "id,status,date_from,date_to,created_at,deposit_refunded_at,customer_id,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
+        accessToken,
+      }),
+      sbSelect("reviews", {
+        select: "booking_id,rating",
+        query: `&target_type=eq.customer&author_id=eq.${user.id}`,
+        accessToken,
+      }).catch(() => []),
+    ])
+      .then(([rows, myRatings]) => {
         if (cancelled) return;
+        const ratingByBooking = Object.fromEntries(myRatings.map((r) => [r.booking_id, r.rating]));
         setReqs(rows.map((r) => ({
           id: r.id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
           customer: (r.profiles && r.profiles.full_name) || "Customer",
           customerPhone: (r.profiles && r.profiles.phone) || "",
+          customerId: r.customer_id,
+          depositAmount: (r.vehicles && r.vehicles.deposit_amount) || 0,
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
           status: r.status,
           created_at: r.created_at,
           depositRefundedAt: r.deposit_refunded_at,
-          customerRating: null,
+          customerRating: ratingByBooking[r.id] || null,
         })));
       })
       .catch((e) => setBookingsError(e.message))
       .finally(() => !cancelled && setBookingsLoading(false));
     return () => { cancelled = true; };
-  }, [usingRealData, profile, accessToken]);
+  }, [usingRealData, profile, accessToken, user]);
 
   // Real reviews left for this supplier.
   useEffect(() => {
@@ -3681,21 +3693,45 @@ function SupplierDashboard({ onOpenAuth }) {
     }
     setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
   };
-  const rateCustomer = (id, rating) => setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
   const [refundingId, setRefundingId] = useState(null);
-  const markDepositRefunded = async (id) => {
+  // Wraps up a booking: marks the deposit refunded (when this vehicle
+  // actually has one) and moves status to "completed", which is what
+  // unlocks the "rate this guest" prompt below.
+  const completeBooking = async (id, hasDeposit) => {
     if (!usingRealData) return;
     setRefundingId(id);
     const prev = reqs;
     const nowIso = new Date().toISOString();
-    setReqs(reqs.map((r) => (r.id === id ? { ...r, depositRefundedAt: nowIso } : r)));
+    const patch = hasDeposit ? { status: "completed", deposit_refunded_at: nowIso } : { status: "completed" };
+    setReqs(reqs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     try {
-      await sbUpdate("bookings", `id=eq.${id}`, { deposit_refunded_at: nowIso }, accessToken);
+      await sbUpdate("bookings", `id=eq.${id}`, patch, accessToken);
     } catch (e) {
       setReqs(prev);
       setBookingsError(e.message);
     } finally {
       setRefundingId(null);
+    }
+  };
+  const [ratingId, setRatingId] = useState(null);
+  const rateCustomer = async (id, customerId, rating) => {
+    if (!usingRealData) return;
+    setRatingId(id);
+    const prev = reqs;
+    setReqs(reqs.map((r) => (r.id === id ? { ...r, customerRating: rating } : r)));
+    try {
+      await sbInsert("reviews", [{
+        booking_id: id,
+        author_id: user.id,
+        target_customer_id: customerId,
+        target_type: "customer",
+        rating,
+      }], accessToken);
+    } catch (e) {
+      setReqs(prev);
+      console.error("Rating customer failed:", e.message);
+    } finally {
+      setRatingId(null);
     }
   };
   const respondDispute = async (id, response) => {
@@ -3887,33 +3923,36 @@ function SupplierDashboard({ onOpenAuth }) {
                 )}
                 {r.status === "accepted" && (
                   <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
-                    {r.depositRefundedAt ? (
-                      <div className="flex items-center gap-1.5">
+                    <button onClick={() => completeBooking(r.id, r.depositAmount > 0)} disabled={refundingId === r.id}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
+                      style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
+                      {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
+                      {r.depositAmount > 0 ? t("supplier.markDepositRefunded") : t("supplier.markRentalComplete")}
+                    </button>
+                  </div>
+                )}
+                {r.status === "completed" && (
+                  <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    {r.depositRefundedAt && (
+                      <div className="flex items-center gap-1.5 mb-2">
                         <Check size={12} color={C.lagoon} />
                         <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.75 }}>
                           {t("supplier.depositRefundedOn", { date: new Date(r.depositRefundedAt).toLocaleDateString() })}
                         </span>
                       </div>
-                    ) : (
-                      <button onClick={() => markDepositRefunded(r.id)} disabled={refundingId === r.id}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
-                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
-                        {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
-                        {t("supplier.markDepositRefunded")}
-                      </button>
                     )}
-                  </div>
-                )}
-                {r.status === "completed" && (
-                  <div className="mt-2.5 pt-2.5 flex items-center justify-between" style={{ borderTop: `1px dashed ${C.line}` }}>
-                    <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.65 }}>
-                      {r.customerRating ? t("supplier.ratedGuest") : t("supplier.rateGuest")}
-                    </span>
-                    {r.customerRating ? (
-                      <StarDisplay rating={r.customerRating} size={13} />
-                    ) : (
-                      <StarRatingInput value={0} onChange={(n) => rateCustomer(r.id, n)} size={15} />
-                    )}
+                    <div className="flex items-center justify-between">
+                      <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.65 }}>
+                        {r.customerRating ? t("supplier.ratedGuest") : t("supplier.rateGuest")}
+                      </span>
+                      {r.customerRating ? (
+                        <StarDisplay rating={r.customerRating} size={13} />
+                      ) : ratingId === r.id ? (
+                        <Loader2 size={13} className="animate-spin" color={C.mist} />
+                      ) : (
+                        <StarRatingInput value={0} onChange={(n) => rateCustomer(r.id, r.customerId, n)} size={15} />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
