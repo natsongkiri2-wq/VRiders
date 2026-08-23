@@ -109,15 +109,16 @@ async function sbDelete(table, query, accessToken) {
 // Supabase project (created via SQL/dashboard) with public read access.
 const VEHICLE_PHOTOS_BUCKET = "vehicle-photos";
 
-// Storage bucket that holds driver's license photos. Unlike vehicle photos,
-// this MUST be private — license photos are sensitive personal data. Needs
-// to exist in Supabase Storage with public access OFF. sbUploadFile()
-// always returns a "public/..." URL regardless of the bucket's actual
-// visibility, which is meaningless for a private bucket, so we deliberately
-// store just the object path (not that URL) in license_photo_url — a
-// signed URL can be generated on demand later, whenever something actually
-// needs to display the photo (there's no viewer for it yet).
-const LICENSE_PHOTOS_BUCKET = "license-photos";
+// Storage bucket that holds driver's license photos (and, per its name,
+// presumably other KYC-type documents too). Unlike vehicle photos, this is
+// private — confirmed in the Supabase dashboard as not marked Public.
+// sbUploadFile() always returns a "public/..." URL regardless of the
+// bucket's actual visibility, which is meaningless for a private bucket,
+// so we deliberately store just the object path (not that URL) in
+// license_photo_url — a signed URL can be generated on demand later,
+// whenever something actually needs to display the photo (there's no
+// viewer for it yet).
+const KYC_DOCUMENTS_BUCKET = "kyc-documents";
 
 // Uploads a single file to a Supabase Storage bucket and returns its public
 // URL. Path should be unique per object (we namespace by user id + vehicle
@@ -2323,7 +2324,7 @@ function IDVerificationModal({ onClose, onVerified }) {
         try {
           const ext = (form.photoFile.name.split(".").pop() || "jpg").toLowerCase();
           const path = `${user.id}/license.${ext}`;
-          await sbUploadFile(LICENSE_PHOTOS_BUCKET, path, form.photoFile, accessToken);
+          await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, form.photoFile, accessToken);
           licensePhotoPath = path;
         } catch (e) {
           // Don't block verification on a photo upload hiccup — the rest
