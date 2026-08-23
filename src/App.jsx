@@ -109,6 +109,16 @@ async function sbDelete(table, query, accessToken) {
 // Supabase project (created via SQL/dashboard) with public read access.
 const VEHICLE_PHOTOS_BUCKET = "vehicle-photos";
 
+// Storage bucket that holds driver's license photos. Unlike vehicle photos,
+// this MUST be private — license photos are sensitive personal data. Needs
+// to exist in Supabase Storage with public access OFF. sbUploadFile()
+// always returns a "public/..." URL regardless of the bucket's actual
+// visibility, which is meaningless for a private bucket, so we deliberately
+// store just the object path (not that URL) in license_photo_url — a
+// signed URL can be generated on demand later, whenever something actually
+// needs to display the photo (there's no viewer for it yet).
+const LICENSE_PHOTOS_BUCKET = "license-photos";
+
 // Uploads a single file to a Supabase Storage bucket and returns its public
 // URL. Path should be unique per object (we namespace by user id + vehicle
 // id) so re-uploads don't collide across suppliers.
@@ -314,15 +324,15 @@ const STRINGS = {
       saveReady: "Save condition record",
     },
     id: {
-      title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — you won't need to do this again on this device.",
+      title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — this is saved to your account, not just this device.",
       fullName: "Full name (as on license)", licenseNumber: "License number", expiry: "Expiry date", country: "Issuing country",
       phone: "Phone number", phoneNote: "So the supplier can reach you about this booking — shared only with suppliers you book with.",
       idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — suppliers may ask to see it alongside your license at pickup.",
       photoLabel: "Photo of your license", tapUpload: "Tap to capture or upload",
       verifyBtn: "Verify my license",
-      privacy: "Your license photo is shared only with the supplier you book with, to confirm your identity at pickup.",
+      privacy: "Kept on file with your account and used only to confirm your identity — not automatically shared with suppliers.",
       checking: "Checking your details...",
-      verifiedTitle: "You're verified", verifiedSub: "You won't need to do this again on this device. Let's get your booking sent.",
+      verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
     },
@@ -533,15 +543,15 @@ const STRINGS = {
       saveReady: "Enregistrer l'état des lieux",
     },
     id: {
-      title: "Vérifiez votre permis", subtitle: "Vérification unique pour rassurer les loueurs — vous n'aurez plus à le refaire sur cet appareil.",
+      title: "Vérifiez votre permis", subtitle: "Vérification unique pour rassurer les loueurs — enregistrée sur votre compte, pas seulement sur cet appareil.",
       fullName: "Nom complet (comme sur le permis)", licenseNumber: "Numéro de permis", expiry: "Date d'expiration", country: "Pays émetteur",
       phone: "Numéro de téléphone", phoneNote: "Pour que le loueur puisse vous joindre au sujet de cette réservation — partagé uniquement avec les loueurs chez qui vous réservez.",
       idpNote: "Comme ce permis n'a pas été délivré au Vanuatu, apportez aussi votre Permis de Conduire International (PCI) — les loueurs peuvent le demander au départ.",
       photoLabel: "Photo de votre permis", tapUpload: "Toucher pour photographier ou importer",
       verifyBtn: "Vérifier mon permis",
-      privacy: "La photo de votre permis n'est partagée qu'avec le loueur chez qui vous réservez, pour confirmer votre identité au départ.",
+      privacy: "Conservée avec votre compte et utilisée uniquement pour confirmer votre identité — non partagée automatiquement avec les loueurs.",
       checking: "Vérification en cours...",
-      verifiedTitle: "Vous êtes vérifié", verifiedSub: "Vous n'aurez plus besoin de refaire cela sur cet appareil. Passons à votre réservation.",
+      verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
     },
@@ -2292,7 +2302,7 @@ function IDVerificationModal({ onClose, onVerified }) {
   const handlePhoto = async (file) => {
     if (!file) return;
     const dataUrl = await fileToDataUrl(file);
-    set("photo", dataUrl);
+    setForm((f) => ({ ...f, photo: dataUrl, photoFile: file }));
   };
 
   const submit = async () => {
@@ -2302,14 +2312,37 @@ function IDVerificationModal({ onClose, onVerified }) {
     }
     setError("");
     setStage("checking");
-    // Save the phone number now so suppliers can reach this customer about
-    // their bookings — this is real, unlike the license check below (which
-    // is still a UI-only simulation; see id.subtitle for the disclosure).
+    // This is a real submission now — everything the customer enters is
+    // saved to their profile and id_verified is genuinely set true. What
+    // this does NOT do is check the license against any government or
+    // third-party registry; it's a self-attested record, the same way the
+    // supplier KYC flow works. See id.subtitle for the disclosure.
     if (SUPABASE_CONFIGURED && user) {
+      let licensePhotoPath = null;
+      if (form.photoFile) {
+        try {
+          const ext = (form.photoFile.name.split(".").pop() || "jpg").toLowerCase();
+          const path = `${user.id}/license.${ext}`;
+          await sbUploadFile(LICENSE_PHOTOS_BUCKET, path, form.photoFile, accessToken);
+          licensePhotoPath = path;
+        } catch (e) {
+          // Don't block verification on a photo upload hiccup — the rest
+          // of the record is still worth saving.
+          console.error("License photo upload failed:", e.message);
+        }
+      }
       try {
-        await sbUpdate("profiles", `id=eq.${user.id}`, { phone: form.phone.trim() }, accessToken);
+        await sbUpdate("profiles", `id=eq.${user.id}`, {
+          full_name: form.fullName.trim(),
+          phone: form.phone.trim(),
+          license_number: form.licenseNumber.trim(),
+          license_country: form.country,
+          license_expiry: form.expiry,
+          ...(licensePhotoPath ? { license_photo_url: licensePhotoPath } : {}),
+          id_verified: true,
+        }, accessToken);
       } catch (e) {
-        console.error("Saving phone number failed:", e.message);
+        console.error("Saving verification failed:", e.message);
       }
     }
     setTimeout(() => setStage("done"), 1400);
@@ -3994,7 +4027,7 @@ function MyBookings() {
 
 function AppInner() {
   const { t } = useLang();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const [mode, setMode] = useState("renter");
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
@@ -4004,11 +4037,26 @@ function AppInner() {
   const [selected, setSelected] = useState(null);
   const [booking, setBooking] = useState(null);
   const [idVerified, setIdVerified] = useState(false);
+  const [verificationChecked, setVerificationChecked] = useState(!SUPABASE_CONFIGURED);
   const [showIdModal, setShowIdModal] = useState(false);
   const [pendingVehicle, setPendingVehicle] = useState(null);
   const [compareIds, setCompareIds] = useState([]);
   const [showCompare, setShowCompare] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+
+  // Read the customer's real verification status from their profile, so
+  // a returning customer on any device sees themself as already verified
+  // instead of being asked to redo it every session.
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !user) { setIdVerified(false); setVerificationChecked(!SUPABASE_CONFIGURED); return; }
+    let cancelled = false;
+    setVerificationChecked(false);
+    sbSelect("profiles", { select: "id_verified", query: `&id=eq.${user.id}`, accessToken })
+      .then((rows) => { if (!cancelled) setIdVerified(!!(rows[0] && rows[0].id_verified)); })
+      .catch((e) => console.error("Checking verification status failed:", e.message))
+      .finally(() => !cancelled && setVerificationChecked(true));
+    return () => { cancelled = true; };
+  }, [user, accessToken]);
 
   // Live vehicle data from Supabase. There is no mock fallback — until a
   // supplier lists a real vehicle, the marketplace is genuinely empty.
@@ -4049,6 +4097,9 @@ function AppInner() {
     setPendingVehicle(v);
     if (SUPABASE_CONFIGURED && !user) {
       setShowAuth(true);
+    } else if (!verificationChecked) {
+      // Still confirming real verification status — the effect below picks
+      // this back up once that resolves.
     } else if (idVerified) {
       setBooking(v);
       setPendingVehicle(null);
@@ -4057,10 +4108,11 @@ function AppInner() {
     }
   };
 
-  // Once sign-in completes for a booking that was waiting on it, pick up
-  // where handleBookRequest left off (ID check, then the booking modal).
+  // Once sign-in completes, and/or the real verification-status check
+  // resolves, pick up where handleBookRequest left off for a booking that
+  // was waiting on either.
   useEffect(() => {
-    if (!user || !pendingVehicle) return;
+    if (!user || !pendingVehicle || !verificationChecked) return;
     setShowAuth(false);
     if (idVerified) {
       setBooking(pendingVehicle);
@@ -4068,8 +4120,7 @@ function AppInner() {
     } else {
       setShowIdModal(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, verificationChecked, idVerified, pendingVehicle]);
 
   const handleVerified = () => {
     setIdVerified(true);
