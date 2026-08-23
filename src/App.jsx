@@ -242,6 +242,13 @@ const STRINGS = {
       submittedOn: "Submitted {date}",
       loadError: "Couldn't load applications:",
       actionError: "Action failed:",
+      suppliersTab: "Suppliers", invoicesTab: "Invoices",
+      generateInvoices: "Generate invoices for completed bookings",
+      generating: "Generating...",
+      generatedSummary: "Created {count} invoice(s) covering {bookings} booking(s).",
+      noNewInvoices: "No new completed bookings to invoice.",
+      markPaid: "Mark as paid", invoicesEmpty: "No invoices yet.",
+      genError: "Couldn't generate invoices:",
     },
     hero: {
       eyebrow: "PORT VILA · EFATE ISLAND",
@@ -382,15 +389,14 @@ const STRINGS = {
     invoices: {
       heading: "Commission & invoices",
       outstanding: "Outstanding balance", nextDue: "Next due",
-      periodThisMonth: "This month", periodLastMonth: "Last month", periodMonthsAgo: "{n} months ago",
       colPeriod: "Period", colBookings: "Bookings", colGross: "Gross bookings", colCommission: "Commission (8%)", colStatus: "Status",
       statusPaid: "Paid", statusDue: "Due", statusOverdue: "Overdue",
       paidOn: "Paid {date}", dueOn: "Due {date}",
       viewDetails: "View details", hideDetails: "Hide details",
       lineItemsHeading: "Bookings this period",
       colVehicle: "Vehicle", colCustomer: "Customer", colDates: "Dates", colAmount: "Amount",
-      payNow: "Prototype only — mark as paid",
-      empty: "No invoices yet — they'll appear here after your first confirmed bookings.",
+      empty: "No invoices yet — they'll appear here once Efate Rides issues your first one, after your completed bookings.",
+      viewOnlyNote: "Invoices are issued by Efate Rides based on your completed bookings. Contact us if something looks off.",
     },
     addVehicle: {
       title: "List a new vehicle",
@@ -465,6 +471,13 @@ const STRINGS = {
       submittedOn: "Envoyé le {date}",
       loadError: "Impossible de charger les demandes :",
       actionError: "Action échouée :",
+      suppliersTab: "Loueurs", invoicesTab: "Factures",
+      generateInvoices: "Générer les factures pour les réservations terminées",
+      generating: "Génération en cours...",
+      generatedSummary: "{count} facture(s) créée(s) couvrant {bookings} réservation(s).",
+      noNewInvoices: "Aucune nouvelle réservation terminée à facturer.",
+      markPaid: "Marquer comme payée", invoicesEmpty: "Aucune facture pour l'instant.",
+      genError: "Impossible de générer les factures :",
     },
     hero: {
       eyebrow: "PORT-VILA · ÎLE D'EFATE",
@@ -605,15 +618,14 @@ const STRINGS = {
     invoices: {
       heading: "Commission et factures",
       outstanding: "Solde dû", nextDue: "Prochaine échéance",
-      periodThisMonth: "Ce mois-ci", periodLastMonth: "Le mois dernier", periodMonthsAgo: "Il y a {n} mois",
       colPeriod: "Période", colBookings: "Réservations", colGross: "Réservations brutes", colCommission: "Commission (8%)", colStatus: "Statut",
       statusPaid: "Payée", statusDue: "Due", statusOverdue: "En retard",
       paidOn: "Payée le {date}", dueOn: "Échéance {date}",
       viewDetails: "Voir le détail", hideDetails: "Masquer le détail",
       lineItemsHeading: "Réservations de cette période",
       colVehicle: "Véhicule", colCustomer: "Client", colDates: "Dates", colAmount: "Montant",
-      payNow: "Prototype uniquement — marquer comme payée",
-      empty: "Aucune facture pour l'instant — elles apparaîtront ici après vos premières réservations confirmées.",
+      empty: "Aucune facture pour l'instant — elles apparaîtront ici dès qu'Efate Rides en émettra une, après vos réservations terminées.",
+      viewOnlyNote: "Les factures sont émises par Efate Rides d'après vos réservations terminées. Contactez-nous si quelque chose semble incorrect.",
     },
     addVehicle: {
       title: "Ajouter un nouveau véhicule",
@@ -2787,38 +2799,97 @@ function AddVehicleModal({ onClose, onAdd }) {
 
 const COMMISSION_RATE = 0.08;
 
-const INITIAL_INVOICES = [];
-
 function invoiceGross(inv) {
   return inv.items.reduce((s, it) => s + it.gross, 0);
 }
 function invoiceCommission(inv) {
-  return Math.round(invoiceGross(inv) * COMMISSION_RATE);
-}
-function offsetDateLabel(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return Math.round(invoiceGross(inv) * (inv.commissionRate ?? COMMISSION_RATE));
 }
 
-function InvoiceRow({ inv, onMarkPaid }) {
+// Finds completed bookings that don't have an invoice_items row yet,
+// groups them by supplier, and creates one invoice per supplier covering
+// all of them. Gross amount per booking is nights x the vehicle's daily
+// rate, since bookings don't store a total price directly.
+async function generateInvoices(accessToken) {
+  const invoicedItems = await sbSelect("invoice_items", { select: "booking_id", accessToken });
+  const alreadyInvoiced = new Set(invoicedItems.map((r) => r.booking_id));
+
+  const completedBookings = await sbSelect("bookings", {
+    select: "id,supplier_id,date_from,date_to,vehicles(price_per_day)",
+    query: "&status=eq.completed",
+    accessToken,
+  });
+  const uninvoiced = completedBookings.filter((b) => !alreadyInvoiced.has(b.id));
+
+  const bySupplier = {};
+  for (const b of uninvoiced) {
+    (bySupplier[b.supplier_id] ||= []).push(b);
+  }
+
+  let invoiceCount = 0;
+  for (const [supplierId, bookings] of Object.entries(bySupplier)) {
+    const periodStart = bookings.reduce((min, b) => (b.date_from < min ? b.date_from : min), bookings[0].date_from);
+    const [invoiceRow] = await sbInsert("invoices", [{
+      supplier_id: supplierId,
+      period_start: periodStart,
+      period_end: daysFromNow(0),
+      commission_rate: COMMISSION_RATE,
+      status: "due",
+      due_date: daysFromNow(14),
+    }], accessToken);
+    const items = bookings.map((b) => {
+      const priceDay = (b.vehicles && b.vehicles.price_per_day) || 0;
+      const nights = Math.max(1, Math.round((new Date(b.date_to) - new Date(b.date_from)) / 86400000));
+      return { invoice_id: invoiceRow.id, booking_id: b.id, gross_amount: nights * priceDay };
+    });
+    await sbInsert("invoice_items", items, accessToken);
+    invoiceCount += 1;
+  }
+
+  return { invoiceCount, bookingCount: uninvoiced.length };
+}
+
+
+// invoice_items -> bookings -> vehicles/profiles) into what InvoiceRow
+// expects. Used by both the supplier's own view and the admin's.
+function mapInvoiceRow(r) {
+  return {
+    id: r.id,
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    dueDate: r.due_date,
+    paidAt: r.paid_at,
+    status: r.status,
+    commissionRate: r.commission_rate,
+    supplierName: (r.suppliers && r.suppliers.business_name) || "",
+    items: (r.invoice_items || []).map((it) => ({
+      vehicle: (it.bookings && it.bookings.vehicles && it.bookings.vehicles.name) || "—",
+      customer: (it.bookings && it.bookings.profiles && it.bookings.profiles.full_name) || "—",
+      dates: it.bookings ? `${fmtDateShort(it.bookings.date_from)} – ${fmtDateShort(it.bookings.date_to)}` : "—",
+      gross: it.gross_amount,
+    })),
+  };
+}
+
+function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
   const gross = invoiceGross(inv);
   const commission = invoiceCommission(inv);
-  const periodLabel =
-    inv.periodOffset === 0 ? t("invoices.periodThisMonth")
-    : inv.periodOffset === 1 ? t("invoices.periodLastMonth")
-    : t("invoices.periodMonthsAgo", { n: inv.periodOffset });
+  const periodLabel = `${fmtDateShort(inv.periodStart)} – ${fmtDateShort(inv.periodEnd)}`;
+  const overdue = inv.status !== "paid" && inv.dueDate && new Date(inv.dueDate) < new Date();
 
-  const statusColor = inv.status === "paid" ? C.lagoon : inv.status === "overdue" ? C.hibiscus : C.coralSoft;
-  const statusBg = inv.status === "paid" ? "rgba(46,158,134,0.18)" : inv.status === "overdue" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)";
-  const statusLabel = inv.status === "paid" ? t("invoices.statusPaid") : inv.status === "overdue" ? t("invoices.statusOverdue") : t("invoices.statusDue");
+  const statusColor = inv.status === "paid" ? C.lagoon : overdue ? C.hibiscus : C.coralSoft;
+  const statusBg = inv.status === "paid" ? "rgba(46,158,134,0.18)" : overdue ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)";
+  const statusLabel = inv.status === "paid" ? t("invoices.statusPaid") : overdue ? t("invoices.statusOverdue") : t("invoices.statusDue");
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.panel, border: `1px solid ${inv.status === "overdue" ? C.hibiscus : C.line}` }}>
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.panel, border: `1px solid ${overdue ? C.hibiscus : C.line}` }}>
       <button onClick={() => setOpen(!open)} className="w-full p-3.5 flex items-center justify-between text-left">
         <div>
+          {showSupplier && (
+            <div style={{ ...body, fontSize: 11, color: C.coralSoft, fontWeight: 600, marginBottom: 2 }}>{inv.supplierName}</div>
+          )}
           <div style={{ ...body, fontSize: 13, fontWeight: 600, color: C.sand }}>{periodLabel}</div>
           <div style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginTop: 2 }}>
             {inv.items.length} {inv.items.length > 1 ? t("map.vehiclePlural") : t("map.vehicleSingular")} · {fmtVUV(gross)} VUV {t("invoices.colGross").toLowerCase()}
@@ -2857,12 +2928,15 @@ function InvoiceRow({ inv, onMarkPaid }) {
           <div className="flex items-center justify-between mt-2.5">
             <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6 }}>
               {inv.status === "paid"
-                ? t("invoices.paidOn", { date: offsetDateLabel(inv.paidOffsetDays) })
-                : t("invoices.dueOn", { date: offsetDateLabel(inv.dueOffsetDays) })}
+                ? t("invoices.paidOn", { date: fmtDateShort(inv.paidAt) })
+                : t("invoices.dueOn", { date: fmtDateShort(inv.dueDate) })}
             </span>
-            {inv.status !== "paid" && (
-              <button onClick={() => onMarkPaid(inv.id)} className="px-2.5 py-1 rounded-full text-[10px]" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
-                {t("invoices.payNow")}
+            {inv.status !== "paid" && onMarkPaid && (
+              <button onClick={() => onMarkPaid(inv.id)} disabled={marking}
+                className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
+                style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                {marking ? <Loader2 size={10} className="animate-spin" /> : null}
+                {t("admin.markPaid")}
               </button>
             )}
           </div>
@@ -2874,8 +2948,28 @@ function InvoiceRow({ inv, onMarkPaid }) {
 
 function InvoicesSection() {
   const { t } = useLang();
-  const [invoices, setInvoices] = useState(INITIAL_INVOICES);
-  const markPaid = (id) => setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "paid", paidOffsetDays: 0 } : i)));
+  const { accessToken } = useAuth();
+  const { profile } = useSupplierAuth();
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !profile) { setLoading(false); return; }
+    let cancelled = false;
+    sbSelect("invoices", {
+      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,invoice_items(gross_amount,bookings(date_from,date_to,vehicles(name),profiles(full_name)))",
+      query: `&supplier_id=eq.${profile.id}&order=period_start.desc`,
+      accessToken,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setInvoices(rows.map(mapInvoiceRow));
+      })
+      .catch((e) => !cancelled && setLoadError(e.message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [profile, accessToken]);
 
   const outstanding = invoices.filter((i) => i.status !== "paid").reduce((s, i) => s + invoiceCommission(i), 0);
   const nextDue = invoices.find((i) => i.status !== "paid");
@@ -2886,7 +2980,15 @@ function InvoicesSection() {
         <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("invoices.heading")}</h3>
       </div>
 
-      {invoices.length === 0 ? (
+      {loadError && (
+        <div className="rounded-lg px-3 py-2.5 mb-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{loadError}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 size={20} color={C.coralSoft} className="animate-spin" /></div>
+      ) : invoices.length === 0 ? (
         <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("invoices.empty")}</p>
       ) : (
         <>
@@ -2898,15 +3000,16 @@ function InvoicesSection() {
             <div className="rounded-xl p-3.5" style={{ backgroundColor: C.panelSoft }}>
               <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6 }}>{t("invoices.nextDue")}</div>
               <div style={{ ...mono, fontSize: 18, color: C.sand, marginTop: 3 }}>
-                {nextDue ? offsetDateLabel(nextDue.dueOffsetDays) : "—"}
+                {nextDue ? fmtDateShort(nextDue.dueDate) : "—"}
               </div>
             </div>
           </div>
           <div className="flex flex-col gap-2.5">
             {invoices.map((inv) => (
-              <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} />
+              <InvoiceRow key={inv.id} inv={inv} />
             ))}
           </div>
+          <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 10, lineHeight: 1.5 }}>{t("invoices.viewOnlyNote")}</p>
         </>
       )}
     </div>
@@ -3415,6 +3518,7 @@ function SupplierGate({ onOpenAuth }) {
 function AdminDashboard() {
   const { t } = useLang();
   const { accessToken } = useAuth();
+  const [tab, setTab] = useState("suppliers");
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -3455,60 +3559,173 @@ function AdminDashboard() {
         {t("admin.subheading", { n: pending.length })}
       </p>
 
-      {loadError && (
-        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.loadError")} {loadError}</span>
+      <div className="flex items-center gap-1 p-0.5 rounded-full mt-5 w-fit" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+        <button onClick={() => setTab("suppliers")} className="px-4 py-1.5 rounded-full text-xs"
+          style={{ ...body, fontWeight: 600, backgroundColor: tab === "suppliers" ? C.coral : "transparent", color: tab === "suppliers" ? "#fff" : C.mist }}>
+          {t("admin.suppliersTab")}
+        </button>
+        <button onClick={() => setTab("invoices")} className="px-4 py-1.5 rounded-full text-xs"
+          style={{ ...body, fontWeight: 600, backgroundColor: tab === "invoices" ? C.coral : "transparent", color: tab === "invoices" ? "#fff" : C.mist }}>
+          {t("admin.invoicesTab")}
+        </button>
+      </div>
+
+      {tab === "invoices" ? (
+        <AdminInvoices />
+      ) : (
+        <>
+          {loadError && (
+            <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+              <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.loadError")} {loadError}</span>
+            </div>
+          )}
+          {actionError && (
+            <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+              <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.actionError")} {actionError}</span>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+          ) : pending.length === 0 ? (
+            <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.empty")}</div>
+          ) : (
+            <div className="flex flex-col gap-3 mt-5">
+              {pending.map((s) => (
+                <div key={s.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{s.business_name}</div>
+                      <div style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.75, marginTop: 4, lineHeight: 1.6 }}>
+                        {s.contact_name} · {s.phone}<br />
+                        {s.email}<br />
+                        {s.business_type === "registered" ? "Registered company" : "Individual operator"}
+                        {s.registration_number ? ` · ${s.registration_number}` : ""}
+                      </div>
+                      {s.submitted_at && (
+                        <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 6 }}>
+                          {t("admin.submittedOn", { date: new Date(s.submitted_at).toLocaleDateString() })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3.5">
+                    <button
+                      disabled={busyId === s.id}
+                      onClick={() => act(s.id, "approve")}
+                      className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
+                      style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}
+                    >
+                      {busyId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t("admin.approve")}
+                    </button>
+                    <button
+                      disabled={busyId === s.id}
+                      onClick={() => act(s.id, "reject")}
+                      className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40"
+                      style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}
+                    >
+                      {t("admin.reject")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminInvoices() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState(null);
+  const [genError, setGenError] = useState("");
+  const [markingId, setMarkingId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    setLoadError("");
+    sbSelect("invoices", {
+      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,suppliers(business_name),invoice_items(gross_amount,bookings(date_from,date_to,vehicles(name),profiles(full_name)))",
+      query: "&order=due_date.desc",
+      accessToken,
+    })
+      .then((rows) => setInvoices(rows.map(mapInvoiceRow)))
+      .catch((e) => setLoadError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setGenError("");
+    setGenResult(null);
+    try {
+      const result = await generateInvoices(accessToken);
+      setGenResult(result);
+      load();
+    } catch (e) {
+      setGenError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const markPaid = async (id) => {
+    setMarkingId(id);
+    const prev = invoices;
+    const nowIso = new Date().toISOString();
+    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "paid", paidAt: nowIso } : i)));
+    try {
+      await sbUpdate("invoices", `id=eq.${id}`, { status: "paid", paid_at: nowIso }, accessToken);
+    } catch (e) {
+      setInvoices(prev);
+      setLoadError(e.message);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  return (
+    <div className="mt-5">
+      <button onClick={handleGenerate} disabled={generating}
+        className="py-2.5 px-4 rounded-xl text-sm flex items-center gap-2 disabled:opacity-50"
+        style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
+        {generating ? <Loader2 size={14} className="animate-spin" /> : null}
+        {generating ? t("admin.generating") : t("admin.generateInvoices")}
+      </button>
+
+      {genResult && (
+        <p style={{ ...body, fontSize: 12, color: C.lagoon, marginTop: 10 }}>
+          {genResult.invoiceCount > 0 ? t("admin.generatedSummary", { count: genResult.invoiceCount, bookings: genResult.bookingCount }) : t("admin.noNewInvoices")}
+        </p>
+      )}
+      {genError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.genError")} {genError}</span>
         </div>
       )}
-      {actionError && (
-        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.actionError")} {actionError}</span>
+      {loadError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{loadError}</span>
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
-      ) : pending.length === 0 ? (
-        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.empty")}</div>
+      ) : invoices.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.invoicesEmpty")}</div>
       ) : (
         <div className="flex flex-col gap-3 mt-5">
-          {pending.map((s) => (
-            <div key={s.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{s.business_name}</div>
-                  <div style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.75, marginTop: 4, lineHeight: 1.6 }}>
-                    {s.contact_name} · {s.phone}<br />
-                    {s.email}<br />
-                    {s.business_type === "registered" ? "Registered company" : "Individual operator"}
-                    {s.registration_number ? ` · ${s.registration_number}` : ""}
-                  </div>
-                  {s.submitted_at && (
-                    <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 6 }}>
-                      {t("admin.submittedOn", { date: new Date(s.submitted_at).toLocaleDateString() })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3.5">
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => act(s.id, "approve")}
-                  className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
-                  style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}
-                >
-                  {busyId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t("admin.approve")}
-                </button>
-                <button
-                  disabled={busyId === s.id}
-                  onClick={() => act(s.id, "reject")}
-                  className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40"
-                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}
-                >
-                  {t("admin.reject")}
-                </button>
-              </div>
-            </div>
+          {invoices.map((inv) => (
+            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} marking={markingId === inv.id} showSupplier />
           ))}
         </div>
       )}
