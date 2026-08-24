@@ -2806,47 +2806,14 @@ function invoiceCommission(inv) {
   return Math.round(invoiceGross(inv) * (inv.commissionRate ?? COMMISSION_RATE));
 }
 
-// Finds completed bookings that don't have an invoice_items row yet,
-// groups them by supplier, and creates one invoice per supplier covering
-// all of them. Gross amount per booking is nights x the vehicle's daily
-// rate, since bookings don't store a total price directly.
+// Calls the generate_invoices() Postgres function, which does the real
+// work (grouping completed bookings by supplier, creating invoices and
+// line items) in a single transaction on the server — see the SQL that
+// created this function for the actual logic.
 async function generateInvoices(accessToken) {
-  const invoicedItems = await sbSelect("invoice_items", { select: "booking_id", accessToken });
-  const alreadyInvoiced = new Set(invoicedItems.map((r) => r.booking_id));
-
-  const completedBookings = await sbSelect("bookings", {
-    select: "id,supplier_id,date_from,date_to,vehicles(price_per_day)",
-    query: "&status=eq.completed",
-    accessToken,
-  });
-  const uninvoiced = completedBookings.filter((b) => !alreadyInvoiced.has(b.id));
-
-  const bySupplier = {};
-  for (const b of uninvoiced) {
-    (bySupplier[b.supplier_id] ||= []).push(b);
-  }
-
-  let invoiceCount = 0;
-  for (const [supplierId, bookings] of Object.entries(bySupplier)) {
-    const periodStart = bookings.reduce((min, b) => (b.date_from < min ? b.date_from : min), bookings[0].date_from);
-    const [invoiceRow] = await sbInsert("invoices", [{
-      supplier_id: supplierId,
-      period_start: periodStart,
-      period_end: daysFromNow(0),
-      commission_rate: COMMISSION_RATE,
-      status: "due",
-      due_date: daysFromNow(14),
-    }], accessToken);
-    const items = bookings.map((b) => {
-      const priceDay = (b.vehicles && b.vehicles.price_per_day) || 0;
-      const nights = Math.max(1, Math.round((new Date(b.date_to) - new Date(b.date_from)) / 86400000));
-      return { invoice_id: invoiceRow.id, booking_id: b.id, gross_amount: nights * priceDay };
-    });
-    await sbInsert("invoice_items", items, accessToken);
-    invoiceCount += 1;
-  }
-
-  return { invoiceCount, bookingCount: uninvoiced.length };
+  const rows = await sbRpc("generate_invoices", {}, accessToken);
+  const result = rows[0] || { invoice_count: 0, booking_count: 0 };
+  return { invoiceCount: result.invoice_count, bookingCount: result.booking_count };
 }
 
 
@@ -3684,7 +3651,7 @@ function AdminInvoices() {
     const nowIso = new Date().toISOString();
     setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "paid", paidAt: nowIso } : i)));
     try {
-      await sbUpdate("invoices", `id=eq.${id}`, { status: "paid", paid_at: nowIso }, accessToken);
+      await sbRpc("mark_invoice_paid", { target_id: id }, accessToken);
     } catch (e) {
       setInvoices(prev);
       setLoadError(e.message);
