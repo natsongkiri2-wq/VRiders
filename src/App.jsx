@@ -382,7 +382,7 @@ const STRINGS = {
       dashboardLabel: "SUPPLIER DASHBOARD",
       welcomeBack: "Welcome back, {supplier}",
       justAdded: "{name} is live and pending verification — it'll show up for customers shortly.",
-      activeListings: "Active listings", pendingRequests: "Pending requests", avgRating: "Avg. rating", monthlyBookings: "This month's bookings",
+      activeListings: "Active listings", pendingRequests: "Pending requests", avgRating: "Avg. rating", monthlyBookings: "Completed this month",
       bookingRequests: "Booking requests",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
@@ -614,7 +614,7 @@ const STRINGS = {
       dashboardLabel: "TABLEAU DE BORD LOUEUR",
       welcomeBack: "Bon retour, {supplier}",
       justAdded: "{name} est en ligne et en attente de vérification — il apparaîtra bientôt pour les clients.",
-      activeListings: "Annonces actives", pendingRequests: "Demandes en attente", avgRating: "Note moyenne", monthlyBookings: "Réservations ce mois-ci",
+      activeListings: "Annonces actives", pendingRequests: "Demandes en attente", avgRating: "Note moyenne", monthlyBookings: "Terminées ce mois-ci",
       bookingRequests: "Demandes de réservation",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
@@ -639,7 +639,7 @@ const STRINGS = {
       heading: "Commission et factures",
       outstanding: "Solde dû", nextDue: "Prochaine échéance",
       colPeriod: "Période", colBookings: "Réservations", colGross: "Réservations brutes", colCommission: "Commission (8%)", colStatus: "Statut",
-      statusPaid: "Payée", statusDue: "Due", statusOverdue: "En retard",
+      statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard",
       paidOn: "Payée le {date}", dueOn: "Échéance {date}",
       viewDetails: "Voir le détail", hideDetails: "Masquer le détail",
       lineItemsHeading: "Réservations de cette période",
@@ -3909,7 +3909,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,created_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,created_at,return_completed_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -3933,6 +3933,7 @@ function SupplierDashboard({ onOpenAuth }) {
           status: r.status,
           created_at: r.created_at,
           depositRefundedAt: r.deposit_refunded_at,
+          returnCompletedAt: r.return_completed_at,
           pickupNote: r.pickup_note,
           returnNote: r.return_note,
           customerRating: ratingByBooking[r.id] || null,
@@ -4108,7 +4109,11 @@ function SupplierDashboard({ onOpenAuth }) {
     : "—";
   const monthStart = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); }, []);
   const monthlyBookingsCount = usingRealData
-    ? reqs.filter((r) => r.created_at && new Date(r.created_at) >= monthStart).length
+    ? reqs.filter((r) => {
+        if (r.status !== "completed") return false;
+        const finishedAt = r.returnCompletedAt || r.created_at;
+        return finishedAt && new Date(finishedAt) >= monthStart;
+      }).length
     : 11;
   const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
 
