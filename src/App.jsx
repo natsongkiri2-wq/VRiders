@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useContext, createContext } from "react";
+import React, { useState, useMemo, useEffect, useRef, useContext, createContext } from "react";
 import {
   Car, Bike, Truck, Bus, Mountain, Zap, MapPin, Star, ShieldCheck, ShieldOff,
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
@@ -6,6 +6,7 @@ import {
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp, Compass,
   ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container
 } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
 
 /* ---------------------------------- tokens ---------------------------------- */
 
@@ -42,6 +43,14 @@ const mono = { fontFamily: "'IBM Plex Mono', monospace" };
 const SUPABASE_URL = "https://dokgjfraatfzdnzqftvy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e4Va8w2ihrstELS4uat06A_h3cxhwAR";
 const SUPABASE_CONFIGURED = !SUPABASE_URL.includes("YOUR-PROJECT-REF");
+
+// The rest of the app talks to Supabase through the lightweight sbSelect/
+// sbInsert/etc. fetch helpers below (kept from an earlier constraint where
+// this ran inside a sandboxed preview). Realtime specifically needs a
+// persistent WebSocket connection, which only the official client manages,
+// so this one instance exists purely to power live subscriptions — nothing
+// else in the app uses it.
+const supabaseRealtime = SUPABASE_CONFIGURED ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // User IDs allowed to see the Admin nav item. This is UI-gating only —
 // real enforcement happens server-side via the is_admin() check inside
@@ -103,6 +112,27 @@ async function sbDelete(table, query, accessToken) {
     method: "DELETE",
     headers: { ...sbHeaders(accessToken), Prefer: "return=representation" },
   }));
+}
+
+// Subscribes to live changes on `table` (optionally scoped with a
+// PostgREST-style filter string like "customer_id=eq.<uuid>") and calls
+// onChange whenever a row is inserted/updated/deleted, so a dashboard can
+// refetch and update on screen without the person manually refreshing.
+// A ref keeps the callback current without re-subscribing every render.
+// No-ops cleanly if Realtime isn't configured or filter is null (e.g.
+// waiting on a user/profile id to become available).
+function useRealtimeRefresh(table, filter, onChange) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    if (!supabaseRealtime || !table || filter === null) return;
+    const channel = supabaseRealtime
+      .channel(`${table}-${filter || "all"}-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table, filter }, () => onChangeRef.current())
+      .subscribe();
+    return () => { supabaseRealtime.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, filter]);
 }
 
 // Storage bucket that holds vehicle listing photos. Must exist in the
@@ -855,6 +885,13 @@ function AuthProvider({ children }) {
     setSession(null);
     clearSessionFromStorage();
   };
+
+  // Realtime subscriptions enforce RLS using this token, same as every
+  // other Supabase request — keep it current whenever the session changes,
+  // including on the very first load once a saved session is restored.
+  useEffect(() => {
+    if (supabaseRealtime) supabaseRealtime.realtime.setAuth(session ? session.access_token : SUPABASE_ANON_KEY);
+  }, [session]);
 
   return (
     <AuthContext.Provider value={{
@@ -2080,6 +2117,10 @@ function BookingModal({ v, onClose }) {
       setCheckingStatus(false);
     }
   };
+  // Live updates — the "Check for updates" button below still works as a
+  // manual fallback, but this makes the tracker update on its own the
+  // moment the supplier marks the deposit refunded.
+  useRealtimeRefresh("bookings", bookingId ? `id=eq.${bookingId}` : null, checkDepositStatus);
   const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
   const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
 
@@ -3902,10 +3943,8 @@ function SupplierDashboard({ onOpenAuth }) {
   }, [usingRealData, profile, accessToken]);
 
   // Real booking requests for this supplier.
-  useEffect(() => {
+  const loadBookings = () => {
     if (!usingRealData) return;
-    let cancelled = false;
-    setBookingsLoading(true);
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
@@ -3920,7 +3959,6 @@ function SupplierDashboard({ onOpenAuth }) {
       }).catch(() => []),
     ])
       .then(([rows, myRatings]) => {
-        if (cancelled) return;
         const ratingByBooking = Object.fromEntries(myRatings.map((r) => [r.booking_id, r.rating]));
         setReqs(rows.map((r) => ({
           id: r.id,
@@ -3940,9 +3978,17 @@ function SupplierDashboard({ onOpenAuth }) {
         })));
       })
       .catch((e) => setBookingsError(e.message))
-      .finally(() => !cancelled && setBookingsLoading(false));
-    return () => { cancelled = true; };
+      .finally(() => setBookingsLoading(false));
+  };
+  useEffect(() => {
+    setBookingsLoading(true);
+    loadBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usingRealData, profile, accessToken, user]);
+
+  // Live updates — the moment a customer sends a new request, or a
+  // pickup/return checklist gets saved, this list refreshes on its own.
+  useRealtimeRefresh("bookings", usingRealData ? `supplier_id=eq.${profile.id}` : null, loadBookings);
 
   // Real reviews left for this supplier.
   useEffect(() => {
@@ -4405,10 +4451,8 @@ function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const load = () => {
     if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
     setError("");
     sbSelect("bookings", {
       select: "id,status,date_from,date_to,reference,created_at,vehicles(name,type),suppliers(business_name,phone)",
@@ -4416,7 +4460,6 @@ function MyBookings() {
       accessToken,
     })
       .then((rows) => {
-        if (cancelled) return;
         setBookings(rows.map((r) => ({
           id: r.id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
@@ -4427,10 +4470,19 @@ function MyBookings() {
           reference: r.reference,
         })));
       })
-      .catch((e) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, accessToken]);
+
+  // Live updates — the moment a supplier accepts/declines a booking, this
+  // list refreshes on its own, no manual refresh needed.
+  useRealtimeRefresh("bookings", user ? `customer_id=eq.${user.id}` : null, load);
 
   const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
 
