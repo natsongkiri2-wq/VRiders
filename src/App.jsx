@@ -154,6 +154,20 @@ async function sbRpc(fn, args, accessToken) {
   }));
 }
 
+// Private buckets (kyc-documents, booking-photos) don't have public URLs —
+// this asks Supabase Storage to mint a temporary signed link so a document
+// can actually be opened, on demand, without making the bucket public.
+async function sbGetSignedUrl(bucket, path, accessToken, expiresIn = 300) {
+  const url = `${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...sbHeaders(accessToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn }),
+  });
+  const data = await sbHandle(res);
+  return `${SUPABASE_URL}/storage/v1${data.signedURL}`;
+}
+
 async function sbSignUp(email, password, fullName) {
   const url = `${SUPABASE_URL}/auth/v1/signup`;
   return sbHandle(await fetch(url, {
@@ -249,6 +263,8 @@ const STRINGS = {
       noNewInvoices: "No new completed bookings to invoice.",
       markPaid: "Mark as paid", invoicesEmpty: "No invoices yet.",
       genError: "Couldn't generate invoices:",
+      viewIdDoc: "View ID document", viewVehicleDoc: "View vehicle document",
+      noDocument: "This supplier hasn't uploaded that document yet.",
     },
     hero: {
       eyebrow: "PORT VILA · EFATE ISLAND",
@@ -371,6 +387,7 @@ const STRINGS = {
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       markRentalComplete: "Mark rental complete",
+      pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
@@ -478,6 +495,8 @@ const STRINGS = {
       noNewInvoices: "Aucune nouvelle réservation terminée à facturer.",
       markPaid: "Marquer comme payée", invoicesEmpty: "Aucune facture pour l'instant.",
       genError: "Impossible de générer les factures :",
+      viewIdDoc: "Voir la pièce d'identité", viewVehicleDoc: "Voir le document du véhicule",
+      noDocument: "Ce loueur n'a pas encore ajouté ce document.",
     },
     hero: {
       eyebrow: "PORT-VILA · ÎLE D'EFATE",
@@ -600,6 +619,7 @@ const STRINGS = {
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       markRentalComplete: "Marquer la location comme terminée",
+      pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
@@ -972,6 +992,31 @@ function SupplierAuthProvider({ children }) {
     setApplyError("");
     if (SUPABASE_CONFIGURED && user) {
       try {
+        // Upload whichever documents were attached. A failed upload
+        // shouldn't block the whole application — the reviewer can ask
+        // for it again — so each is wrapped individually.
+        let idDocPath = null;
+        let vehicleDocPath = null;
+        if (data.idDocFile) {
+          try {
+            const ext = (data.idDocFile.name.split(".").pop() || "jpg").toLowerCase();
+            const path = `${user.id}/id-doc.${ext}`;
+            await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, data.idDocFile, accessToken);
+            idDocPath = path;
+          } catch (e) {
+            console.error("ID document upload failed:", e.message);
+          }
+        }
+        if (data.vehicleDocFile) {
+          try {
+            const ext = (data.vehicleDocFile.name.split(".").pop() || "jpg").toLowerCase();
+            const path = `${user.id}/vehicle-doc.${ext}`;
+            await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, data.vehicleDocFile, accessToken);
+            vehicleDocPath = path;
+          } catch (e) {
+            console.error("Vehicle document upload failed:", e.message);
+          }
+        }
         const rows = await sbInsert("suppliers", [{
           user_id: user.id,
           business_name: data.businessName,
@@ -980,14 +1025,17 @@ function SupplierAuthProvider({ children }) {
           phone: data.phone,
           email: data.email,
           years_operating: data.years ? Number(data.years) : null,
-          registration_number: data.idNumber || null,
+          registration_number: data.regNumber || null,
           submitted_at: new Date().toISOString(),
           kyc_status: "pending",
+          ...(idDocPath ? { id_doc_url: idDocPath } : {}),
+          ...(vehicleDocPath ? { vehicle_doc_url: vehicleDocPath } : {}),
         }], accessToken);
         setProfile(rows[0]);
         setStatus(rows[0].kyc_status);
       } catch (e) {
         setApplyError(e.message);
+        throw e;
       }
       return;
     }
@@ -2058,10 +2106,16 @@ function BookingModal({ v, onClose }) {
       if (rows.length) {
         await sbInsert("booking_photos", rows, accessToken);
       }
+      // One combined update: always save whatever note was written (even
+      // if empty, to clear a previous one on re-save), plus the real
+      // return-completed timestamp once all return photos are in.
+      const patch = { [`${mode}_note`]: note ? note.trim() : null };
       if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length) {
-        const nowIso = new Date().toISOString();
-        await sbUpdate("bookings", `id=eq.${bookingId}`, { return_completed_at: nowIso }, accessToken);
-        setDepositInfo((d) => ({ ...d, returnCompletedAt: nowIso }));
+        patch.return_completed_at = new Date().toISOString();
+      }
+      await sbUpdate("bookings", `id=eq.${bookingId}`, patch, accessToken);
+      if (patch.return_completed_at) {
+        setDepositInfo((d) => ({ ...d, returnCompletedAt: patch.return_completed_at }));
       }
     }
     setChecklist((c) => ({ ...c, [mode]: photos }));
@@ -3184,25 +3238,31 @@ function SupplierKYCModal({ onClose, onSubmit }) {
   const [form, setForm] = useState({
     businessName: "", contactName: "", phone: "", email: "",
     businessType: "individual", regNumber: "", area: "Port Vila",
-    idDoc: null, vehicleDoc: null, agree: false,
+    idDoc: null, idDocFile: null, vehicleDoc: null, vehicleDocFile: null, agree: false,
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
 
   const handleUpload = async (key, file) => {
     if (!file) return;
     const dataUrl = await fileToDataUrl(file);
-    set(key, dataUrl);
+    setForm((f) => ({ ...f, [key]: dataUrl, [key + "File"]: file }));
   };
+
+  const [submitError, setSubmitError] = useState("");
 
   const step0Valid = form.businessName.trim() && form.contactName.trim() && form.phone.trim() && form.email.trim();
   const step1Valid = form.idDoc && form.vehicleDoc && form.agree;
 
-  const submit = () => {
+  const submit = async () => {
     setSubmitting(true);
-    setTimeout(() => {
-      onSubmit(form);
+    setSubmitError("");
+    try {
+      await onSubmit(form);
       onClose();
-    }, 900);
+    } catch (e) {
+      setSubmitError(e.message);
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -3353,6 +3413,11 @@ function SupplierKYCModal({ onClose, onSubmit }) {
                   <div className="flex justify-between"><span style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.65 }}>{t("kyc.businessType")}</span><span style={{ ...body, fontSize: 12, color: C.sand, fontWeight: 500 }}>{form.businessType === "registered" ? t("kyc.registered") : t("kyc.individual")}</span></div>
                   <div className="flex justify-between"><span style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.65 }}>{t("kyc.area")}</span><span style={{ ...body, fontSize: 12, color: C.sand, fontWeight: 500 }}>{form.area}</span></div>
                 </div>
+                {submitError && (
+                  <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                    <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{submitError}</span>
+                  </div>
+                )}
                 <div className="flex gap-2 mt-4">
                   <button onClick={() => setStep(1)} className="w-11 h-10 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
                     <ChevronLeft size={16} color={C.mist} />
@@ -3491,6 +3556,29 @@ function AdminDashboard() {
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [viewingDoc, setViewingDoc] = useState(null); // "{supplierId}-{docType}" while loading
+
+  // Opens a supplier's KYC document in a new tab via a short-lived signed
+  // URL. Uses a dedicated RPC rather than pulling the path off the pending
+  // list directly, since that list is a security-definer RPC we don't want
+  // to guess the exact return columns of.
+  const viewDocument = async (supplierId, docType) => {
+    const key = `${supplierId}-${docType}`;
+    setViewingDoc(key);
+    try {
+      const path = await sbRpc("get_supplier_document_url", { target_id: supplierId, doc_type: docType }, accessToken);
+      if (!path) {
+        setActionError(t("admin.noDocument"));
+        return;
+      }
+      const signedUrl = await sbGetSignedUrl(KYC_DOCUMENTS_BUCKET, path, accessToken);
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setViewingDoc(null);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -3576,7 +3664,21 @@ function AdminDashboard() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2 mt-3.5">
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => viewDocument(s.id, "id")} disabled={viewingDoc === `${s.id}-id`}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] disabled:opacity-50"
+                      style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                      {viewingDoc === `${s.id}-id` ? <Loader2 size={11} className="animate-spin" /> : <CreditCard size={11} />}
+                      {t("admin.viewIdDoc")}
+                    </button>
+                    <button onClick={() => viewDocument(s.id, "vehicle")} disabled={viewingDoc === `${s.id}-vehicle`}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] disabled:opacity-50"
+                      style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                      {viewingDoc === `${s.id}-vehicle` ? <Loader2 size={11} className="animate-spin" /> : <Truck size={11} />}
+                      {t("admin.viewVehicleDoc")}
+                    </button>
+                  </div>
+                  <div className="flex gap-2 mt-2">
                     <button
                       disabled={busyId === s.id}
                       onClick={() => act(s.id, "approve")}
@@ -3807,7 +3909,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,created_at,deposit_refunded_at,customer_id,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,created_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -3831,6 +3933,8 @@ function SupplierDashboard({ onOpenAuth }) {
           status: r.status,
           created_at: r.created_at,
           depositRefundedAt: r.deposit_refunded_at,
+          pickupNote: r.pickup_note,
+          returnNote: r.return_note,
           customerRating: ratingByBooking[r.id] || null,
         })));
       })
@@ -4103,6 +4207,20 @@ function SupplierDashboard({ onOpenAuth }) {
                       style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
                       <Phone size={11} /> {t("booking.call")}
                     </a>
+                  </div>
+                )}
+                {(r.pickupNote || r.returnNote) && (
+                  <div className="mt-2.5 pt-2.5 flex flex-col gap-1.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    {r.pickupNote && (
+                      <div style={{ ...body, fontSize: 11, color: C.mist, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600, color: C.sand }}>{t("supplier.pickupNoteLabel")}</span> {r.pickupNote}
+                      </div>
+                    )}
+                    {r.returnNote && (
+                      <div style={{ ...body, fontSize: 11, color: C.mist, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600, color: C.sand }}>{t("supplier.returnNoteLabel")}</span> {r.returnNote}
+                      </div>
+                    )}
                   </div>
                 )}
                 {r.status === "accepted" && (
