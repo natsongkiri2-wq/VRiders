@@ -792,10 +792,18 @@ const AREA_COORDS = {
 
 // Returns today (or n days from today) as an ISO date string, used as the
 // `min` attribute on date pickers so past dates can't be selected.
+// Deliberately computed in Vanuatu's own timezone rather than the
+// browser's — a tourist whose phone is still set to their home timezone
+// should still see "today" as Efate's today, since that's where the
+// pickup actually happens.
 function daysFromNow(n) {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  // en-CA locale formats as YYYY-MM-DD, which is what we want as a plain
+  // ISO date string — using this instead of toISOString() specifically
+  // avoids toISOString()'s UTC conversion, which would shift the date
+  // for roughly 11 hours of every Vanuatu day (UTC+11, no DST).
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Efate" }).format(d);
 }
 
 function rangesOverlap(aFrom, aTo, bFrom, bTo) {
@@ -1115,6 +1123,16 @@ function fmtDateShort(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// For timestamptz values (has its own time + offset already, unlike the
+// plain `date` columns fmtDateShort handles) — always shown in Vanuatu's
+// own timezone rather than the viewer's browser, so a supplier and a
+// tourist checking from home see the same calendar date for the same
+// real-world event.
+function fmtTimestampShort(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Pacific/Efate" });
 }
 
 function DepositGauge({ amount, size = 34 }) {
@@ -1927,7 +1945,7 @@ function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, disp
 
           <p style={{ ...body, fontSize: 12, color: C.mist, marginTop: 8, lineHeight: 1.5 }}>
             {depositRefundedAt
-              ? t("deposit.refundedMsg", { supplier, date: new Date(depositRefundedAt).toLocaleDateString() })
+              ? t("deposit.refundedMsg", { supplier, date: fmtTimestampShort(depositRefundedAt) })
               : overdue
                 ? t("deposit.overdueMsg", { duration: fmtDuration(remainingMs) })
                 : t("deposit.trackingMsg", { supplier, duration: fmtDuration(remainingMs) })}
@@ -2513,7 +2531,7 @@ function IDVerificationModal({ onClose, onVerified }) {
   };
 
   const submit = async () => {
-    if (new Date(form.expiry) < new Date()) {
+    if (form.expiry < daysFromNow(0)) {
       setError(t("id.expiredError"));
       return;
     }
@@ -2939,7 +2957,7 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
   const gross = invoiceGross(inv);
   const commission = invoiceCommission(inv);
   const periodLabel = `${fmtDateShort(inv.periodStart)} – ${fmtDateShort(inv.periodEnd)}`;
-  const overdue = inv.status !== "paid" && inv.dueDate && new Date(inv.dueDate) < new Date();
+  const overdue = inv.status !== "paid" && inv.dueDate && inv.dueDate < daysFromNow(0);
 
   const statusColor = inv.status === "paid" ? C.lagoon : overdue ? C.hibiscus : C.coralSoft;
   const statusBg = inv.status === "paid" ? "rgba(46,158,134,0.18)" : overdue ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)";
@@ -2990,7 +3008,7 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
           <div className="flex items-center justify-between mt-2.5">
             <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6 }}>
               {inv.status === "paid"
-                ? t("invoices.paidOn", { date: fmtDateShort(inv.paidAt) })
+                ? t("invoices.paidOn", { date: fmtTimestampShort(inv.paidAt) })
                 : t("invoices.dueOn", { date: fmtDateShort(inv.dueDate) })}
             </span>
             {inv.status !== "paid" && onMarkPaid && (
@@ -3165,7 +3183,7 @@ function AvailabilityCalendar({ vehicleId }) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = daysFromNow(0);
   const viewDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -3700,7 +3718,7 @@ function AdminDashboard() {
                       </div>
                       {s.submitted_at && (
                         <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 6 }}>
-                          {t("admin.submittedOn", { date: new Date(s.submitted_at).toLocaleDateString() })}
+                          {t("admin.submittedOn", { date: fmtTimestampShort(s.submitted_at) })}
                         </div>
                       )}
                     </div>
@@ -4007,7 +4025,7 @@ function SupplierDashboard({ onOpenAuth }) {
           rating: r.rating,
           comment: r.comment,
           vehicle: (r.bookings && r.bookings.vehicles && r.bookings.vehicles.name) || "",
-          date: fmtDateShort(r.created_at),
+          date: fmtTimestampShort(r.created_at),
         })));
       })
       .catch(() => {});
@@ -4290,7 +4308,7 @@ function SupplierDashboard({ onOpenAuth }) {
                       <div className="flex items-center gap-1.5 mb-2">
                         <Check size={12} color={C.lagoon} />
                         <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.75 }}>
-                          {t("supplier.depositRefundedOn", { date: new Date(r.depositRefundedAt).toLocaleDateString() })}
+                          {t("supplier.depositRefundedOn", { date: fmtTimestampShort(r.depositRefundedAt) })}
                         </span>
                       </div>
                     )}
