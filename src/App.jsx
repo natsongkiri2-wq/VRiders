@@ -358,6 +358,8 @@ const STRINGS = {
       returnLockedSub: "Unlocks once pickup photos are logged",
       returnDoneSub: "{total} photos logged", returnPendingSub: "Take before handing the keys back · {done}/{total}",
       conditionFooter: "Photos are timestamped automatically and kept with this booking — your record if there's ever a deposit dispute.",
+      waitingNote: "Waiting for {supplier} to confirm — pickup and return photos will be available here once your booking is accepted.",
+      declinedNote: "This request wasn't accepted, so there's nothing to log here. Browse other vehicles to find another option.",
       done: "Done",
     },
     deposit: {
@@ -590,6 +592,8 @@ const STRINGS = {
       returnLockedSub: "Se débloque une fois les photos de départ enregistrées",
       returnDoneSub: "{total} photos enregistrées", returnPendingSub: "À prendre avant de rendre les clés · {done}/{total}",
       conditionFooter: "Les photos sont automatiquement horodatées et conservées avec cette réservation — votre preuve en cas de litige sur la caution.",
+      waitingNote: "En attente de confirmation de {supplier} — les photos de départ et de retour seront disponibles ici une fois votre réservation acceptée.",
+      declinedNote: "Cette demande n'a pas été acceptée, il n'y a donc rien à enregistrer ici. Parcourez d'autres véhicules pour trouver une autre option.",
       done: "Terminé",
     },
     deposit: {
@@ -2114,6 +2118,7 @@ function BookingModal({ v, onClose }) {
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
   const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null });
+  const [bookingStatus, setBookingStatus] = useState("pending");
   const [checkingStatus, setCheckingStatus] = useState(false);
   // Prefer the real, persisted return timestamp so the 48h countdown
   // survives a page refresh; only fall back to the local photo timestamps
@@ -2127,17 +2132,25 @@ function BookingModal({ v, onClose }) {
     if (!SUPABASE_CONFIGURED || !bookingId) return;
     setCheckingStatus(true);
     try {
-      const rows = await sbSelect("bookings", { select: "return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
-      if (rows[0]) setDepositInfo({ returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at });
+      const rows = await sbSelect("bookings", { select: "status,return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
+      if (rows[0]) {
+        setBookingStatus(rows[0].status);
+        setDepositInfo({ returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at });
+      }
     } catch (e) {
       console.error("Checking deposit status failed:", e.message);
     } finally {
       setCheckingStatus(false);
     }
   };
+  // Fetch status as soon as we have a real booking to check, and keep it
+  // live — this is what lets the pickup/return workflow only appear once
+  // the supplier has actually accepted, instead of showing immediately
+  // while the customer is still waiting on a decision.
+  useEffect(() => { checkDepositStatus(); }, [bookingId]);
   // Live updates — the "Check for updates" button below still works as a
   // manual fallback, but this makes the tracker update on its own the
-  // moment the supplier marks the deposit refunded.
+  // moment the supplier accepts/declines or marks the deposit refunded.
   useRealtimeRefresh("bookings", bookingId ? `id=eq.${bookingId}` : null, checkDepositStatus);
   const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
   const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
@@ -2373,6 +2386,21 @@ function BookingModal({ v, onClose }) {
               </p>
             )}
 
+            {bookingStatus === "declined" ? (
+              <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
+                  <Info size={16} color={C.mist} className="mt-0.5 shrink-0" />
+                  <p style={{ ...body, fontSize: 12.5, color: C.mist, lineHeight: 1.6 }}>{t("booking.declinedNote")}</p>
+                </div>
+              </div>
+            ) : bookingStatus !== "accepted" && bookingStatus !== "completed" ? (
+              <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
+                  <Clock size={16} color={C.coralSoft} className="mt-0.5 shrink-0" />
+                  <p style={{ ...body, fontSize: 12.5, color: C.mist, lineHeight: 1.6 }}>{t("booking.waitingNote", { supplier: v.supplier })}</p>
+                </div>
+              </div>
+            ) : (
             <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
               <div style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, fontWeight: 600, marginBottom: 10 }}>
                 {t("booking.conditionHeader")}
@@ -2423,6 +2451,7 @@ function BookingModal({ v, onClose }) {
                 {t("booking.conditionFooter")}
               </p>
             </div>
+            )}
 
             {returnDone && (
               <DepositTracker
