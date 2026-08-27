@@ -268,6 +268,7 @@ const STRINGS = {
       empty: "No bookings yet — go find a vehicle.", browseBtn: "Browse vehicles",
       signInTitle: "Sign in to see your bookings", signInBody: "Your booking history and requests will show up here once you're signed in.",
       loadError: "Couldn't load your bookings:",
+      viewPickup: "Pickup / return photos",
     },
     auth: {
       signIn: "Sign in", signUp: "Sign up", signOut: "Sign out",
@@ -386,6 +387,7 @@ const STRINGS = {
       saveIncomplete: "Capture all {total} photos to save",
       saveReady: "Save condition record",
       saving: "Saving photos...",
+      alreadySaved: "Saved",
     },
     id: {
       title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — this is saved to your account, not just this device.",
@@ -502,6 +504,7 @@ const STRINGS = {
       empty: "Aucune réservation pour l'instant — trouvez un véhicule.", browseBtn: "Voir les véhicules",
       signInTitle: "Connectez-vous pour voir vos réservations", signInBody: "Votre historique de réservations apparaîtra ici une fois connecté.",
       loadError: "Impossible de charger vos réservations :",
+      viewPickup: "Photos de départ / retour",
     },
     auth: {
       signIn: "Se connecter", signUp: "S'inscrire", signOut: "Se déconnecter",
@@ -620,6 +623,7 @@ const STRINGS = {
       saveIncomplete: "Prenez les {total} photos pour enregistrer",
       saveReady: "Enregistrer l'état des lieux",
       saving: "Enregistrement des photos...",
+      alreadySaved: "Enregistrée",
     },
     id: {
       title: "Vérifiez votre permis", subtitle: "Vérification unique pour rassurer les loueurs — enregistrée sur votre compte, pas seulement sur cet appareil.",
@@ -1839,8 +1843,13 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
                   onChange={(e) => capture(item.id, e.target.files && e.target.files[0])}
                 />
                 <div className="aspect-square flex items-center justify-center relative">
-                  {shot ? (
+                  {shot && shot.dataUrl ? (
                     <img src={shot.dataUrl} alt={label} className="w-full h-full object-cover" />
+                  ) : shot ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <Check size={20} color={C.lagoon} />
+                      <span style={{ ...body, fontSize: 8.5, color: C.mist, opacity: 0.6 }}>{t("checklist.alreadySaved")}</span>
+                    </div>
                   ) : (
                     <ImagePlus size={22} color={C.mist} style={{ opacity: 0.5 }} />
                   )}
@@ -2084,14 +2093,15 @@ function CustomerReview({ supplier, onSubmit }) {
   );
 }
 
-function BookingModal({ v, onClose }) {
+function BookingModal({ v, resumeBooking, onClose }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
   const [vehicleBookings, setVehicleBookings] = useState([]);
   // Real, currently-taken date ranges for this vehicle, so the date picker
-  // can warn about conflicts before a customer sends a request.
+  // can warn about conflicts before a customer sends a request. Not
+  // needed when reopening a booking that already exists.
   useEffect(() => {
-    if (!SUPABASE_CONFIGURED) return;
+    if (!SUPABASE_CONFIGURED || resumeBooking) return;
     let cancelled = false;
     sbSelect("bookings", { select: "date_from,date_to", query: `&vehicle_id=eq.${v.id}&status=in.(pending,accepted)` })
       .then((rows) => {
@@ -2100,19 +2110,40 @@ function BookingModal({ v, onClose }) {
       })
       .catch((e) => console.error("Availability check failed:", e.message));
     return () => { cancelled = true; };
-  }, [v.id]);
-  const [step, setStep] = useState(0);
+  }, [v.id, resumeBooking]);
+  const [step, setStep] = useState(resumeBooking ? 2 : 0);
   const [agreed, setAgreed] = useState(false);
   const [dates, setDates] = useState({ from: "", to: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [bookingId, setBookingId] = useState(null);
+  const [bookingId, setBookingId] = useState(resumeBooking ? resumeBooking.id : null);
   const [checklist, setChecklist] = useState({ pickup: null, return: null });
   const [activeChecklist, setActiveChecklist] = useState(null);
   const [review, setReview] = useState(null);
   const [dispute, setDispute] = useState(null);
   const [disputeModalOpen, setDisputeModalOpen] = useState(false);
-  const ref = useMemo(() => "EFR-" + Math.random().toString(36).slice(2, 8).toUpperCase(), []);
+  const ref = useMemo(() => resumeBooking ? resumeBooking.reference : "EFR-" + Math.random().toString(36).slice(2, 8).toUpperCase(), [resumeBooking]);
+  // When reopening an existing booking, pull in whatever pickup/return
+  // photos were already logged (possibly in an earlier session), so the
+  // checklist shows real progress instead of starting from zero. We don't
+  // reconstruct the actual images here (would need signed URLs for the
+  // private bucket) — just enough to correctly mark items done, unlock
+  // Return once Pickup is complete, and drive the deposit countdown.
+  useEffect(() => {
+    if (!resumeBooking || !SUPABASE_CONFIGURED) return;
+    sbSelect("booking_photos", { select: "stage,item_key,taken_at", query: `&booking_id=eq.${resumeBooking.id}`, accessToken })
+      .then((rows) => {
+        const byStage = { pickup: {}, return: {} };
+        rows.forEach((r) => {
+          byStage[r.stage][r.item_key] = { time: new Date(r.taken_at), alreadySaved: true };
+        });
+        setChecklist({
+          pickup: Object.keys(byStage.pickup).length ? byStage.pickup : null,
+          return: Object.keys(byStage.return).length ? byStage.return : null,
+        });
+      })
+      .catch((e) => console.error("Loading existing checklist failed:", e.message));
+  }, [resumeBooking, accessToken]);
   const waDigits = (v.phone || "").replace(/[^0-9]/g, "");
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
@@ -4491,7 +4522,7 @@ function SupplierDashboard({ onOpenAuth }) {
 
 /* ---------------------------------- my bookings (customer) ---------------------------------- */
 
-function MyBookings() {
+function MyBookings({ onResume }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
   const [bookings, setBookings] = useState([]);
@@ -4502,14 +4533,16 @@ function MyBookings() {
     if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
     setError("");
     sbSelect("bookings", {
-      select: "id,status,date_from,date_to,reference,created_at,vehicles(name,type),suppliers(business_name,phone)",
+      select: "id,status,date_from,date_to,reference,created_at,vehicles(id,name,type,deposit_amount),suppliers(business_name,phone)",
       query: `&customer_id=eq.${user.id}&order=created_at.desc`,
       accessToken,
     })
       .then((rows) => {
         setBookings(rows.map((r) => ({
           id: r.id,
+          vehicleId: r.vehicles && r.vehicles.id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
+          deposit: (r.vehicles && r.vehicles.deposit_amount) || 0,
           supplier: (r.suppliers && r.suppliers.business_name) || "—",
           supplierPhone: (r.suppliers && r.suppliers.phone) || "",
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
@@ -4593,6 +4626,17 @@ function MyBookings() {
                     </a>
                   </div>
                 )}
+                {(b.status === "accepted" || b.status === "completed") && (
+                  <button
+                    onClick={() => onResume({
+                      id: b.vehicleId, name: b.vehicle, supplier: b.supplier, phone: b.supplierPhone, deposit: b.deposit,
+                    }, b.id, b.reference)}
+                    className="w-full mt-3 pt-3 flex items-center justify-center gap-1.5 text-xs"
+                    style={{ ...body, fontWeight: 600, color: C.lagoon, borderTop: `1px dashed ${C.line}` }}
+                  >
+                    <Camera size={13} /> {t("mybookings.viewPickup")} <ChevronRight size={13} />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -4615,6 +4659,7 @@ function AppInner() {
   const [view, setView] = useState("list");
   const [selected, setSelected] = useState(null);
   const [booking, setBooking] = useState(null);
+  const [resumeBookingId, setResumeBookingId] = useState(null);
   const [idVerified, setIdVerified] = useState(false);
   const [verificationChecked, setVerificationChecked] = useState(!SUPABASE_CONFIGURED);
   const [showIdModal, setShowIdModal] = useState(false);
@@ -4669,6 +4714,14 @@ function AppInner() {
   }, []);
 
   const sourceVehicles = dbVehicles;
+
+  // Reopens BookingModal for a booking that already exists (from My
+  // Bookings), landing straight on the pickup/return workflow instead of
+  // the request flow — there's no new request to send here.
+  const handleResumeBooking = (vehicleLike, existingBookingId, reference) => {
+    setResumeBookingId({ id: existingBookingId, reference });
+    setBooking(vehicleLike);
+  };
 
   const handleBookRequest = (v) => {
     setSelected(null);
@@ -4786,7 +4839,7 @@ function AppInner() {
       ) : mode === "admin" ? (
         <AdminDashboard />
       ) : mode === "mybookings" ? (
-        <MyBookings />
+        <MyBookings onResume={handleResumeBooking} />
       ) : (
         <SupplierDashboard onOpenAuth={() => setShowAuth(true)} />
       )}
@@ -4813,7 +4866,7 @@ function AppInner() {
           onBook={handleBookRequest}
         />
       )}
-      {booking && <BookingModal v={booking} onClose={() => setBooking(null)} />}
+      {booking && <BookingModal v={booking} resumeBooking={resumeBookingId} onClose={() => { setBooking(null); setResumeBookingId(null); }} />}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </div>
   );
