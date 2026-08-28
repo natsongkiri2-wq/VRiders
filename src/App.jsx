@@ -2500,6 +2500,12 @@ function BookingModal({ v, resumeBooking, onClose }) {
             )}
 
             {returnDone && (
+              // Reviews should only appear once the supplier has actually
+              // confirmed the rental is over (bookingStatus), not just
+              // because the customer finished their own return checklist —
+              // otherwise a customer could rate before the supplier has
+              // any chance to complete the booking themselves.
+              bookingStatus !== "completed" ? null :
               review ? (
                 <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
                   <div style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, fontWeight: 600, marginBottom: 10 }}>
