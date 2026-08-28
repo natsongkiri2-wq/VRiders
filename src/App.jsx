@@ -421,6 +421,7 @@ const STRINGS = {
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       markRentalComplete: "Mark rental complete",
+      awaitingReturn: "Waiting on the customer to log return photos before this can be completed.",
       pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
@@ -657,6 +658,7 @@ const STRINGS = {
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       markRentalComplete: "Marquer la location comme terminée",
+      awaitingReturn: "En attente que le client enregistre les photos de retour avant de pouvoir terminer.",
       pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
@@ -4354,12 +4356,18 @@ function SupplierDashboard({ onOpenAuth }) {
                 )}
                 {r.status === "accepted" && (
                   <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
-                    <button onClick={() => completeBooking(r.id, r.depositAmount > 0)} disabled={refundingId === r.id}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
-                      style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
-                      {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
-                      {r.depositAmount > 0 ? t("supplier.markDepositRefunded") : t("supplier.markRentalComplete")}
-                    </button>
+                    {r.returnCompletedAt ? (
+                      <button onClick={() => completeBooking(r.id, r.depositAmount > 0)} disabled={refundingId === r.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
+                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
+                        {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
+                        {r.depositAmount > 0 ? t("supplier.markDepositRefunded") : t("supplier.markRentalComplete")}
+                      </button>
+                    ) : (
+                      <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55 }}>
+                        {t("supplier.awaitingReturn")}
+                      </span>
+                    )}
                   </div>
                 )}
                 {r.status === "completed" && (
