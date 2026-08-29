@@ -422,6 +422,7 @@ const STRINGS = {
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       markRentalComplete: "Mark rental complete",
       awaitingReturn: "Waiting on the customer to log return photos before this can be completed.",
+      blockedDatesConflict: "You've blocked some or all of these dates on your availability calendar. Remove the block first if you're sure you want to accept this booking.",
       pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
@@ -659,6 +660,7 @@ const STRINGS = {
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       markRentalComplete: "Marquer la location comme terminée",
       awaitingReturn: "En attente que le client enregistre les photos de retour avant de pouvoir terminer.",
+      blockedDatesConflict: "Vous avez bloqué tout ou partie de ces dates dans votre calendrier de disponibilité. Retirez d'abord le blocage si vous êtes sûr de vouloir accepter cette réservation.",
       pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
@@ -4041,7 +4043,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,created_at,return_completed_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -4055,11 +4057,14 @@ function SupplierDashboard({ onOpenAuth }) {
         const ratingByBooking = Object.fromEntries(myRatings.map((r) => [r.booking_id, r.rating]));
         setReqs(rows.map((r) => ({
           id: r.id,
+          vehicleId: r.vehicle_id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
           customer: (r.profiles && r.profiles.full_name) || "Customer",
           customerPhone: (r.profiles && r.profiles.phone) || "",
           customerId: r.customer_id,
           depositAmount: (r.vehicles && r.vehicles.deposit_amount) || 0,
+          dateFrom: r.date_from,
+          dateTo: r.date_to,
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
           status: r.status,
           created_at: r.created_at,
@@ -4109,6 +4114,32 @@ function SupplierDashboard({ onOpenAuth }) {
 
   const act = async (id, newStatus) => {
     if (usingRealData) {
+      // Before accepting, make sure this doesn't overlap a date range the
+      // supplier has blocked themselves (maintenance, personal use, etc.)
+      // — otherwise a single click could accept a booking straight into a
+      // vehicle they've deliberately marked unavailable.
+      if (newStatus === "accepted") {
+        const r = reqs.find((x) => x.id === id);
+        if (r && r.vehicleId) {
+          try {
+            const blocks = await sbSelect("supplier_blocks", {
+              select: "date_from,date_to",
+              query: `&vehicle_id=eq.${r.vehicleId}`,
+              accessToken,
+            });
+            const conflict = blocks.some((b) => rangesOverlap(r.dateFrom, r.dateTo, b.date_from, b.date_to));
+            if (conflict) {
+              setBookingsError(t("supplier.blockedDatesConflict"));
+              return;
+            }
+          } catch (e) {
+            // Fail safe: if we can't confirm there's no conflict, don't
+            // accept anyway — surface the error instead of guessing.
+            setBookingsError(e.message);
+            return;
+          }
+        }
+      }
       const prev = reqs;
       setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
       try {
