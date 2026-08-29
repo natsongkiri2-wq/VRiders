@@ -361,6 +361,10 @@ const STRINGS = {
       conditionFooter: "Photos are timestamped automatically and kept with this booking — your record if there's ever a deposit dispute.",
       waitingNote: "Waiting for {supplier} to confirm — pickup and return photos will be available here once your booking is accepted.",
       declinedNote: "This request wasn't accepted, so there's nothing to log here. Browse other vehicles to find another option.",
+      cancelBooking: "Cancel this booking", cancelConfirm: "Cancel this booking? This can't be undone.",
+      cancelYes: "Yes, cancel it", cancelNo: "Never mind",
+      cancelledByYouNote: "You cancelled this booking.",
+      cancelledBySupplierNote: "{supplier} cancelled this booking.",
       done: "Done",
     },
     deposit: {
@@ -599,6 +603,10 @@ const STRINGS = {
       conditionFooter: "Les photos sont automatiquement horodatées et conservées avec cette réservation — votre preuve en cas de litige sur la caution.",
       waitingNote: "En attente de confirmation de {supplier} — les photos de départ et de retour seront disponibles ici une fois votre réservation acceptée.",
       declinedNote: "Cette demande n'a pas été acceptée, il n'y a donc rien à enregistrer ici. Parcourez d'autres véhicules pour trouver une autre option.",
+      cancelBooking: "Annuler cette réservation", cancelConfirm: "Annuler cette réservation ? Cette action est irréversible.",
+      cancelYes: "Oui, annuler", cancelNo: "Laisser tomber",
+      cancelledByYouNote: "Vous avez annulé cette réservation.",
+      cancelledBySupplierNote: "{supplier} a annulé cette réservation.",
       done: "Terminé",
     },
     deposit: {
@@ -2153,9 +2161,11 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
-  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null });
+  const [depositInfo, setDepositInfo] = useState({ pickupCompletedAt: null, returnCompletedAt: null, depositRefundedAt: null, cancelledBy: null });
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   // Prefer the real, persisted return timestamp so the 48h countdown
   // survives a page refresh; only fall back to the local photo timestamps
   // if that hasn't loaded yet (or there's no backend to load it from).
@@ -2168,15 +2178,34 @@ function BookingModal({ v, resumeBooking, onClose }) {
     if (!SUPABASE_CONFIGURED || !bookingId) return;
     setCheckingStatus(true);
     try {
-      const rows = await sbSelect("bookings", { select: "status,return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
+      const rows = await sbSelect("bookings", { select: "status,pickup_completed_at,return_completed_at,deposit_refunded_at,cancelled_by", query: `&id=eq.${bookingId}`, accessToken });
       if (rows[0]) {
         setBookingStatus(rows[0].status);
-        setDepositInfo({ returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at });
+        setDepositInfo({ pickupCompletedAt: rows[0].pickup_completed_at, returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at, cancelledBy: rows[0].cancelled_by });
       }
     } catch (e) {
       console.error("Checking deposit status failed:", e.message);
     } finally {
       setCheckingStatus(false);
+    }
+  };
+  // Cancels a booking that hasn't been physically picked up yet. Available
+  // to the customer while status is pending or accepted, right up until
+  // pickup_completed_at is set — once the vehicle is actually out with
+  // them, cancellation no longer makes sense (that's a dispute situation).
+  const canCancel = (bookingStatus === "pending" || bookingStatus === "accepted") && !depositInfo.pickupCompletedAt;
+  const cancelBooking = async () => {
+    if (!SUPABASE_CONFIGURED || !bookingId) return;
+    setCancelling(true);
+    try {
+      await sbUpdate("bookings", `id=eq.${bookingId}`, { status: "cancelled", cancelled_at: new Date().toISOString(), cancelled_by: "customer" }, accessToken);
+      setBookingStatus("cancelled");
+      setDepositInfo((d) => ({ ...d, cancelledBy: "customer" }));
+      setConfirmingCancel(false);
+    } catch (e) {
+      console.error("Cancelling booking failed:", e.message);
+    } finally {
+      setCancelling(false);
     }
   };
   // Fetch status as soon as we have a real booking to check, and keep it
@@ -2216,14 +2245,22 @@ function BookingModal({ v, resumeBooking, onClose }) {
       }
       // One combined update: always save whatever note was written (even
       // if empty, to clear a previous one on re-save), plus the real
-      // return-completed timestamp once all return photos are in.
+      // pickup/return-completed timestamp once all photos for that stage
+      // are in.
       const patch = { [`${mode}_note`]: note ? note.trim() : null };
+      if (mode === "pickup" && Object.keys(photos).length === CHECK_ITEMS.length) {
+        patch.pickup_completed_at = new Date().toISOString();
+      }
       if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length) {
         patch.return_completed_at = new Date().toISOString();
       }
       await sbUpdate("bookings", `id=eq.${bookingId}`, patch, accessToken);
-      if (patch.return_completed_at) {
-        setDepositInfo((d) => ({ ...d, returnCompletedAt: patch.return_completed_at }));
+      if (patch.pickup_completed_at || patch.return_completed_at) {
+        setDepositInfo((d) => ({
+          ...d,
+          ...(patch.pickup_completed_at ? { pickupCompletedAt: patch.pickup_completed_at } : {}),
+          ...(patch.return_completed_at ? { returnCompletedAt: patch.return_completed_at } : {}),
+        }));
       }
     }
     setChecklist((c) => ({ ...c, [mode]: photos }));
@@ -2422,7 +2459,43 @@ function BookingModal({ v, resumeBooking, onClose }) {
               </p>
             )}
 
-            {bookingStatus === "declined" ? (
+            {canCancel && (
+              confirmingCancel ? (
+                <div className="rounded-xl p-3.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.12)", border: `1px solid ${C.hibiscus}` }}>
+                  <p style={{ ...body, fontSize: 12, color: C.mist, marginBottom: 10, lineHeight: 1.5 }}>{t("booking.cancelConfirm")}</p>
+                  <div className="flex gap-2">
+                    <button onClick={cancelBooking} disabled={cancelling}
+                      className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>
+                      {cancelling ? <Loader2 size={13} className="animate-spin" /> : null}
+                      {t("booking.cancelYes")}
+                    </button>
+                    <button onClick={() => setConfirmingCancel(false)} disabled={cancelling}
+                      className="flex-1 py-2 rounded-lg text-xs disabled:opacity-50"
+                      style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                      {t("booking.cancelNo")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmingCancel(true)}
+                  className="w-full mt-3 text-center text-xs py-1"
+                  style={{ ...body, color: C.mist, opacity: 0.55 }}>
+                  {t("booking.cancelBooking")}
+                </button>
+              )
+            )}
+
+            {bookingStatus === "cancelled" ? (
+              <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
+                  <Info size={16} color={C.mist} className="mt-0.5 shrink-0" />
+                  <p style={{ ...body, fontSize: 12.5, color: C.mist, lineHeight: 1.6 }}>
+                    {depositInfo.cancelledBy === "supplier" ? t("booking.cancelledBySupplierNote", { supplier: v.supplier }) : t("booking.cancelledByYouNote")}
+                  </p>
+                </div>
+              </div>
+            ) : bookingStatus === "declined" ? (
               <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
                 <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
                   <Info size={16} color={C.mist} className="mt-0.5 shrink-0" />
@@ -2529,7 +2602,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
               )
             )}
 
-            {!dispute && (
+            {!dispute && (bookingStatus === "accepted" || bookingStatus === "completed") && (
               <button onClick={() => setDisputeModalOpen(true)} className="w-full mt-4 flex items-center justify-center gap-1.5 py-1.5 text-[11px]" style={{ ...body, color: C.mist, opacity: 0.5 }}>
                 <Flag size={11} /> {t("dispute.reportIssue")}
               </button>
@@ -4043,7 +4116,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,vehicle_id,created_at,pickup_completed_at,return_completed_at,deposit_refunded_at,cancelled_by,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -4069,7 +4142,9 @@ function SupplierDashboard({ onOpenAuth }) {
           status: r.status,
           created_at: r.created_at,
           depositRefundedAt: r.deposit_refunded_at,
+          pickupCompletedAt: r.pickup_completed_at,
           returnCompletedAt: r.return_completed_at,
+          cancelledBy: r.cancelled_by,
           pickupNote: r.pickup_note,
           returnNote: r.return_note,
           customerRating: ratingByBooking[r.id] || null,
