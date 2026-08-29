@@ -1999,9 +1999,10 @@ function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, disp
 const DISPUTE_CATEGORIES = ["Deposit not refunded", "Damage disagreement", "Vehicle not as described", "Other"];
 const DISPUTE_CATEGORY_KEYS = { "Deposit not refunded": "depositNotRefunded", "Damage disagreement": "damageDisagreement", "Vehicle not as described": "notAsDescribed", "Other": "other" };
 
-function DisputeModal({ vehicleName, supplier, pickupCount, returnCount, onClose, onSubmit }) {
+function DisputeModal({ vehicleName, supplier, pickupCount, returnCount, categories, onClose, onSubmit }) {
   const { t } = useLang();
-  const [category, setCategory] = useState(DISPUTE_CATEGORIES[0]);
+  const availableCategories = categories && categories.length ? categories : DISPUTE_CATEGORIES;
+  const [category, setCategory] = useState(availableCategories[0]);
   const [description, setDescription] = useState("");
   const categoryLabels = t("dispute.categories");
 
@@ -2025,7 +2026,7 @@ function DisputeModal({ vehicleName, supplier, pickupCount, returnCount, onClose
 
         <FieldLabel>{t("dispute.whatIssue")}</FieldLabel>
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {DISPUTE_CATEGORIES.map((cat) => (
+          {availableCategories.map((cat) => (
             <button key={cat} onClick={() => setCategory(cat)}
               className="px-3 py-1.5 rounded-full text-xs"
               style={{ ...body, fontWeight: 500, backgroundColor: category === cat ? C.hibiscus : "transparent", color: category === cat ? "#fff" : C.mist, border: `1px solid ${category === cat ? "transparent" : C.line}` }}>
@@ -2555,6 +2556,12 @@ function BookingModal({ v, resumeBooking, onClose }) {
           supplier={v.supplier}
           pickupCount={checklist.pickup ? Object.keys(checklist.pickup).length : 0}
           returnCount={checklist.return ? Object.keys(checklist.return).length : 0}
+          categories={[
+            ...(returnDone && v.deposit > 0 ? ["Deposit not refunded"] : []),
+            ...(returnDone ? ["Damage disagreement"] : []),
+            ...(pickupDone ? ["Vehicle not as described"] : []),
+            "Other",
+          ]}
           onClose={() => setDisputeModalOpen(false)}
           onSubmit={submitDispute}
         />
