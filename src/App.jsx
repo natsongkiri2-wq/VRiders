@@ -2153,7 +2153,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
-  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null });
+  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null, cancelledBy: null });
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [checkingStatus, setCheckingStatus] = useState(false);
   // Prefer the real, persisted return timestamp so the 48h countdown
@@ -2168,10 +2168,14 @@ function BookingModal({ v, resumeBooking, onClose }) {
     if (!SUPABASE_CONFIGURED || !bookingId) return;
     setCheckingStatus(true);
     try {
-      const rows = await sbSelect("bookings", { select: "status,return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
+      const rows = await sbSelect("bookings", { select: "status,return_completed_at,deposit_refunded_at,cancelled_by", query: `&id=eq.${bookingId}`, accessToken });
       if (rows[0]) {
         setBookingStatus(rows[0].status);
-        setDepositInfo({ returnCompletedAt: rows[0].return_completed_at, depositRefundedAt: rows[0].deposit_refunded_at });
+        setDepositInfo({
+          returnCompletedAt: rows[0].return_completed_at,
+          depositRefundedAt: rows[0].deposit_refunded_at,
+          cancelledBy: rows[0].cancelled_by,
+        });
       }
     } catch (e) {
       console.error("Checking deposit status failed:", e.message);
@@ -2216,7 +2220,11 @@ function BookingModal({ v, resumeBooking, onClose }) {
       }
       // One combined update: always save whatever note was written (even
       // if empty, to clear a previous one on re-save), plus the real
-      // return-completed timestamp once all return photos are in.
+      // return-completed timestamp once all return photos are in — this
+      // is what the deposit tracker and rental-completion gate both key
+      // off of. There's no equivalent "pickup completed" timestamp column
+      // on bookings — booking_photos rows (with their own taken_at) are
+      // the record of pickup having happened.
       const patch = { [`${mode}_note`]: note ? note.trim() : null };
       if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length) {
         patch.return_completed_at = new Date().toISOString();
