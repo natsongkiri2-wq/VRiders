@@ -345,6 +345,9 @@ const STRINGS = {
       disputesEmpty: "No disputes — nothing to see here.",
       disputesLoadError: "Couldn't load disputes:",
       disputesOpenCount: "{n} open", disputesResolvedCount: "{n} resolved",
+      listingsTab: "Listings", listingsEmpty: "No listings yet.",
+      listingsLoadError: "Couldn't load listings:",
+      listingSuspended: "Suspended", suspendListing: "Suspend", reinstateListing: "Reinstate",
       generateInvoices: "Generate invoices for completed bookings",
       generating: "Generating...",
       generatedSummary: "Created {count} invoice(s) covering {bookings} booking(s).",
@@ -483,6 +486,7 @@ const STRINGS = {
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       depositOverdue: "{duration} overdue", overdueDepositsBanner: "{n} deposit(s) past the 48-hour refund window — your customers can already see this as overdue.",
+      listingSuspended: "Suspended", listingSuspendedNote: "Efate Rides has hidden this listing from customers. Contact support if you're not sure why.",
       markRentalComplete: "Mark rental complete",
       fullRefund: "Full refund", partialRefund: "Partial / deduct", cancel: "Cancel",
       refundAmountLabel: "Refund amount (VUV)",
@@ -616,6 +620,9 @@ const STRINGS = {
       disputesEmpty: "Aucun litige — rien à signaler ici.",
       disputesLoadError: "Impossible de charger les litiges :",
       disputesOpenCount: "{n} en cours", disputesResolvedCount: "{n} résolu(s)",
+      listingsTab: "Annonces", listingsEmpty: "Aucune annonce pour l'instant.",
+      listingsLoadError: "Impossible de charger les annonces :",
+      listingSuspended: "Suspendue", suspendListing: "Suspendre", reinstateListing: "Réactiver",
       suppliersTab: "Loueurs", invoicesTab: "Factures",
       generateInvoices: "Générer les factures pour les réservations terminées",
       generating: "Génération en cours...",
@@ -755,6 +762,7 @@ const STRINGS = {
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       depositOverdue: "en retard de {duration}", overdueDepositsBanner: "{n} caution(s) au-delà du délai de 48 heures — vos clients le voient déjà comme en retard.",
+      listingSuspended: "Suspendue", listingSuspendedNote: "Efate Rides a masqué cette annonce aux clients. Contactez le support si vous n'êtes pas sûr(e) pourquoi.",
       markRentalComplete: "Marquer la location comme terminée",
       fullRefund: "Remboursement total", partialRefund: "Partiel / déduction", cancel: "Annuler",
       refundAmountLabel: "Montant remboursé (VUV)",
@@ -4311,12 +4319,18 @@ function AdminDashboard() {
           style={{ ...body, fontWeight: 600, backgroundColor: tab === "disputes" ? C.coral : "transparent", color: tab === "disputes" ? "#fff" : C.mist }}>
           {t("admin.disputesTab")}
         </button>
+        <button onClick={() => setTab("listings")} className="px-4 py-1.5 rounded-full text-xs"
+          style={{ ...body, fontWeight: 600, backgroundColor: tab === "listings" ? C.coral : "transparent", color: tab === "listings" ? "#fff" : C.mist }}>
+          {t("admin.listingsTab")}
+        </button>
       </div>
 
       {tab === "invoices" ? (
         <AdminInvoices />
       ) : tab === "disputes" ? (
         <AdminDisputes />
+      ) : tab === "listings" ? (
+        <AdminListings />
       ) : (
         <>
           {loadError && (
@@ -4484,6 +4498,102 @@ function AdminDisputes() {
           {disputes.map((d) => (
             <DisputeCard key={d.id} d={d} onRespond={respond} onResolve={resolve} supplierName={d.supplier} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Listing moderation. Until now, approving a supplier was the only
+// control point — every vehicle that supplier ever added went straight
+// to the public marketplace forever, with no way to pull an individual
+// problem listing without suspending the whole supplier. This gives
+// admins a per-listing on/off switch instead.
+function AdminListings() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    setLoadError("");
+    sbSelect("vehicles", {
+      select: "id,name,type,price_per_day,is_active,verified,created_at,photo_urls,suppliers(business_name)",
+      query: "&order=created_at.desc",
+      accessToken,
+    })
+      .then((rows) => setListings(rows.map((r) => ({
+        id: r.id, name: r.name, type: r.type, price: r.price_per_day,
+        isActive: r.is_active !== false, verified: r.verified,
+        supplier: (r.suppliers && r.suppliers.business_name) || "—",
+        photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
+      }))))
+      .catch((e) => setLoadError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+  useRealtimeRefresh("vehicles", undefined, load);
+
+  const toggleActive = async (id, nextActive) => {
+    setBusyId(id);
+    const prev = listings;
+    setListings(listings.map((l) => (l.id === id ? { ...l, isActive: nextActive } : l)));
+    try {
+      await sbUpdate("vehicles", `id=eq.${id}`, { is_active: nextActive }, accessToken);
+    } catch (e) {
+      setListings(prev);
+      setLoadError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      {loadError && (
+        <div className="rounded-lg px-3 py-2.5 mt-2 mb-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.listingsLoadError")} {loadError}</span>
+        </div>
+      )}
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+      ) : listings.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.listingsEmpty")}</div>
+      ) : (
+        <div className="flex flex-col gap-2.5 mt-3">
+          {listings.map((l) => {
+            const meta = TYPE_META[l.type];
+            const Icon = meta.icon;
+            return (
+              <div key={l.id} className="rounded-xl p-3.5 flex items-center gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${l.isActive ? C.line : C.hibiscus}` }}>
+                <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ backgroundColor: meta.color, opacity: l.isActive ? 1 : 0.5 }}>
+                  {l.photoUrl ? <img src={l.photoUrl} alt={l.name} className="w-full h-full object-cover" /> : <Icon size={17} color="rgba(255,255,255,0.92)" strokeWidth={1.5} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13.5 }}>{l.name}</div>
+                  <div style={{ ...body, color: C.mist, opacity: 0.65, fontSize: 11.5 }}>{l.supplier} · {fmtVUV(l.price)} {t("card.perDay")}</div>
+                  {!l.isActive && (
+                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded-full text-[9px]" style={{ ...body, fontWeight: 600, backgroundColor: "rgba(217,82,122,0.18)", color: C.hibiscus }}>
+                      {t("admin.listingSuspended")}
+                    </span>
+                  )}
+                </div>
+                <button
+                  disabled={busyId === l.id}
+                  onClick={() => toggleActive(l.id, !l.isActive)}
+                  className="px-3 py-1.5 rounded-full text-[11px] shrink-0 disabled:opacity-50 flex items-center gap-1.5"
+                  style={{ ...body, fontWeight: 600, backgroundColor: l.isActive ? "transparent" : C.lagoon, color: l.isActive ? C.hibiscus : "#fff", border: `1px solid ${l.isActive ? C.hibiscus : "transparent"}` }}
+                >
+                  {busyId === l.id ? <Loader2 size={11} className="animate-spin" /> : null}
+                  {l.isActive ? t("admin.suspendListing") : t("admin.reinstateListing")}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -4696,6 +4806,7 @@ function SupplierDashboard({ onOpenAuth }) {
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
           photoUrls: r.photo_urls || [],
+          isActive: r.is_active !== false,
         }));
         setMyVehicles(mapped);
         setCalendarVehicleId((prev) => prev && mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id);
@@ -4974,6 +5085,7 @@ function SupplierDashboard({ onOpenAuth }) {
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl, photoUrls: photoUrl ? [photoUrl] : [],
+          isActive: r.is_active !== false,
         };
         setMyVehicles((prev) => [mapped, ...prev]);
         setCalendarVehicleId((prev) => prev || mapped.id);
@@ -4983,7 +5095,7 @@ function SupplierDashboard({ onOpenAuth }) {
         return;
       }
     } else {
-      setMyVehicles([{ ...vehicle, photoUrl: vehicle.photoPreview || null, photoUrls: vehicle.photoPreview ? [vehicle.photoPreview] : [] }, ...myVehicles]);
+      setMyVehicles([{ ...vehicle, photoUrl: vehicle.photoPreview || null, photoUrls: vehicle.photoPreview ? [vehicle.photoPreview] : [], isActive: true }, ...myVehicles]);
     }
     setShowAdd(false);
     setJustAdded(vehicle.name);
@@ -5370,8 +5482,18 @@ function SupplierDashboard({ onOpenAuth }) {
                           {t("supplier.pending")}
                         </span>
                       )}
+                      {!v.isActive && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px]" style={{ ...body, fontWeight: 600, backgroundColor: "rgba(217,82,122,0.18)", color: C.hibiscus }}>
+                          {t("supplier.listingSuspended")}
+                        </span>
+                      )}
                     </div>
                     <div style={{ ...body, color: C.mist, opacity: 0.65, fontSize: 12 }}>{fmtVUV(v.price)} {t("card.perDay")} · {v.deposit ? `${fmtVUV(v.deposit)} ${t("card.deposit")}` : t("card.noDeposit")}</div>
+                    {!v.isActive && (
+                      <div style={{ ...body, color: C.hibiscus, opacity: 0.85, fontSize: 10.5, marginTop: 2, lineHeight: 1.4 }}>
+                        {t("supplier.listingSuspendedNote")}
+                      </div>
+                    )}
                   </div>
                   <DepositGauge amount={v.deposit} size={28} />
                 </div>
@@ -5627,6 +5749,9 @@ function AppInner() {
     setVehiclesLoading(true);
     sbSelect("vehicles", {
       select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
+      // Suspended listings (admin moderation — see AdminListings) stay out
+      // of the public marketplace entirely, not just visually hidden.
+      query: "&is_active=eq.true",
     })
       .then((rows) => {
         setDbVehicles(rows.map((r) => ({
