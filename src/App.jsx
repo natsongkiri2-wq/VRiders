@@ -340,7 +340,11 @@ const STRINGS = {
       submittedOn: "Submitted {date}",
       loadError: "Couldn't load applications:",
       actionError: "Action failed:",
-      suppliersTab: "Suppliers", invoicesTab: "Invoices",
+      suppliersTab: "Suppliers", invoicesTab: "Invoices", disputesTab: "Disputes",
+      disputesSubheading: "{n} open dispute(s) across all suppliers",
+      disputesEmpty: "No disputes — nothing to see here.",
+      disputesLoadError: "Couldn't load disputes:",
+      disputesOpenCount: "{n} open", disputesResolvedCount: "{n} resolved",
       generateInvoices: "Generate invoices for completed bookings",
       generating: "Generating...",
       generatedSummary: "Created {count} invoice(s) covering {bookings} booking(s).",
@@ -604,6 +608,11 @@ const STRINGS = {
       submittedOn: "Envoyé le {date}",
       loadError: "Impossible de charger les demandes :",
       actionError: "Action échouée :",
+      disputesTab: "Litiges",
+      disputesSubheading: "{n} litige(s) en cours, tous loueurs confondus",
+      disputesEmpty: "Aucun litige — rien à signaler ici.",
+      disputesLoadError: "Impossible de charger les litiges :",
+      disputesOpenCount: "{n} en cours", disputesResolvedCount: "{n} résolu(s)",
       suppliersTab: "Loueurs", invoicesTab: "Factures",
       generateInvoices: "Générer les factures pour les réservations terminées",
       generating: "Génération en cours...",
@@ -3594,7 +3603,7 @@ function InvoicesSection() {
   );
 }
 
-function DisputeCard({ d, onRespond, onResolve }) {
+function DisputeCard({ d, onRespond, onResolve, supplierName }) {
   const { t } = useLang();
   const [text, setText] = useState(d.response || "");
   const [sent, setSent] = useState(!!d.response);
@@ -3608,6 +3617,9 @@ function DisputeCard({ d, onRespond, onResolve }) {
             {categoryLabels[DISPUTE_CATEGORY_KEYS[d.category]] || d.category}
           </span>
           <div style={{ ...body, fontSize: 13, fontWeight: 600, color: C.sand, marginTop: 6 }}>{d.vehicle} · {d.customer}</div>
+          {supplierName && (
+            <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 2 }}>{supplierName}</div>
+          )}
         </div>
         <span style={{ ...body, fontSize: 10, fontWeight: 600, color: d.status === "open" ? C.hibiscus : C.lagoon, whiteSpace: "nowrap" }}>
           {d.status === "open" ? t("supplier.statusOpen") : t("supplier.resolved")}
@@ -4180,10 +4192,16 @@ function AdminDashboard() {
           style={{ ...body, fontWeight: 600, backgroundColor: tab === "invoices" ? C.coral : "transparent", color: tab === "invoices" ? "#fff" : C.mist }}>
           {t("admin.invoicesTab")}
         </button>
+        <button onClick={() => setTab("disputes")} className="px-4 py-1.5 rounded-full text-xs"
+          style={{ ...body, fontWeight: 600, backgroundColor: tab === "disputes" ? C.coral : "transparent", color: tab === "disputes" ? "#fff" : C.mist }}>
+          {t("admin.disputesTab")}
+        </button>
       </div>
 
       {tab === "invoices" ? (
         <AdminInvoices />
+      ) : tab === "disputes" ? (
+        <AdminDisputes />
       ) : (
         <>
           {loadError && (
@@ -4258,6 +4276,100 @@ function AdminDashboard() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// Admin-wide dispute queue. Until now, a customer's overdue-deposit
+// dispute could only be seen and handled from inside the one supplier's
+// own dashboard, even though the app promises Efate Rides will follow up
+// on these — nobody at Efate Rides actually had a way to see them all.
+// Reuses the same DisputeCard the supplier dashboard uses, unfiltered by
+// supplier, with the supplier's name shown on each card for context.
+function AdminDisputes() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [disputes, setDisputes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    setLoadError("");
+    sbSelect("disputes", {
+      select: "id,category,description,status,supplier_response,created_at,bookings(vehicles(name),suppliers(business_name)),profiles!disputes_raised_by_fkey(full_name)",
+      query: "&order=status.asc,created_at.desc",
+      accessToken,
+    })
+      .then((rows) => setDisputes(rows.map((d) => ({
+        id: d.id,
+        category: d.category,
+        description: d.description,
+        status: d.status,
+        response: d.supplier_response || "",
+        vehicle: (d.bookings && d.bookings.vehicles && d.bookings.vehicles.name) || "—",
+        supplier: (d.bookings && d.bookings.suppliers && d.bookings.suppliers.business_name) || "—",
+        customer: (d.profiles && d.profiles.full_name) || "Customer",
+      }))))
+      .catch((e) => setLoadError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+  useRealtimeRefresh("disputes", undefined, load);
+
+  const respond = async (id, response) => {
+    const prev = disputes;
+    setDisputes(disputes.map((d) => (d.id === id ? { ...d, response } : d)));
+    try {
+      await sbUpdate("disputes", `id=eq.${id}`, { supplier_response: response }, accessToken);
+    } catch (e) {
+      setDisputes(prev);
+      setLoadError(e.message);
+    }
+  };
+
+  const resolve = async (id) => {
+    const prev = disputes;
+    setDisputes(disputes.map((d) => (d.id === id ? { ...d, status: "resolved" } : d)));
+    try {
+      await sbUpdate("disputes", `id=eq.${id}`, { status: "resolved", resolved_at: new Date().toISOString() }, accessToken);
+    } catch (e) {
+      setDisputes(prev);
+      setLoadError(e.message);
+    }
+  };
+
+  const openCount = disputes.filter((d) => d.status === "open").length;
+  const resolvedCount = disputes.length - openCount;
+
+  return (
+    <div className="mt-2">
+      <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.65, marginTop: 4, marginBottom: 4 }}>
+        {t("admin.disputesSubheading", { n: openCount })}
+      </p>
+      {disputes.length > 0 && (
+        <div className="flex items-center gap-3 mb-3">
+          <span style={{ ...body, fontSize: 11, fontWeight: 600, color: C.hibiscus }}>{t("admin.disputesOpenCount", { n: openCount })}</span>
+          <span style={{ ...body, fontSize: 11, fontWeight: 600, color: C.lagoon }}>{t("admin.disputesResolvedCount", { n: resolvedCount })}</span>
+        </div>
+      )}
+      {loadError && (
+        <div className="rounded-lg px-3 py-2.5 mt-2 mb-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("admin.disputesLoadError")} {loadError}</span>
+        </div>
+      )}
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+      ) : disputes.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.disputesEmpty")}</div>
+      ) : (
+        <div className="flex flex-col gap-2.5 mt-1">
+          {disputes.map((d) => (
+            <DisputeCard key={d.id} d={d} onRespond={respond} onResolve={resolve} supplierName={d.supplier} />
+          ))}
+        </div>
       )}
     </div>
   );
