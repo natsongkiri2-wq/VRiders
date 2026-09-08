@@ -5327,15 +5327,13 @@ function AppInner() {
   const [vehiclesLoading, setVehiclesLoading] = useState(SUPABASE_CONFIGURED);
   const [vehiclesError, setVehiclesError] = useState("");
 
-  useEffect(() => {
+  const loadVehicles = () => {
     if (!SUPABASE_CONFIGURED) return;
-    let cancelled = false;
     setVehiclesLoading(true);
     sbSelect("vehicles", {
       select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
     })
       .then((rows) => {
-        if (cancelled) return;
         setDbVehicles(rows.map((r) => ({
           id: r.id, name: r.name, type: r.type,
           supplierId: r.supplier_id,
@@ -5347,10 +5345,14 @@ function AppInner() {
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
         })));
       })
-      .catch((e) => !cancelled && setVehiclesError(e.message))
-      .finally(() => !cancelled && setVehiclesLoading(false));
-    return () => { cancelled = true; };
-  }, []);
+      .catch((e) => setVehiclesError(e.message))
+      .finally(() => setVehiclesLoading(false));
+  };
+  useEffect(() => { loadVehicles(); }, []);
+  // Keeps the marketplace list current without a manual refresh — a new
+  // listing, a price change, or a supplier being verified all show up on
+  // their own, matching how bookings/disputes/invoices already behave.
+  useRealtimeRefresh("vehicles", SUPABASE_CONFIGURED ? undefined : null, loadVehicles);
 
   const sourceVehicles = dbVehicles;
 
