@@ -859,6 +859,19 @@ function useAuth() {
   return useContext(AuthContext);
 }
 
+// Builds the local session object from a Supabase Auth token response,
+// capturing when the access token actually expires (GoTrue returns
+// expires_in in seconds, an hour by default) so AuthProvider can refresh it
+// proactively instead of letting it silently go stale.
+function buildSession(data) {
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    user: data.user,
+    expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+  };
+}
+
 function AuthProvider({ children }) {
   // Session is persisted to localStorage (refresh token + access token) so a
   // real deployed visitor stays signed in across page reloads. On mount, we
@@ -877,7 +890,7 @@ function AuthProvider({ children }) {
     }
     sbRefreshSession(saved.refresh_token)
       .then((data) => {
-        const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+        const next = buildSession(data);
         setSession(next);
         saveSessionToStorage(next);
       })
@@ -885,13 +898,38 @@ function AuthProvider({ children }) {
       .finally(() => setRestoringSession(false));
   }, []);
 
+  // Proactively refreshes the access token a minute before it expires, so
+  // a visitor who leaves a tab open past the token's ~1 hour lifetime
+  // doesn't start silently failing every request until they reload —
+  // nothing else in the app retries on a 401. Re-arms itself after every
+  // successful refresh (since that updates `session` too); signs the
+  // person out if the refresh token itself has been revoked or expired,
+  // rather than leaving them stuck signed-in-but-broken.
+  useEffect(() => {
+    if (!session || !session.expiresAt) return;
+    const msUntilRefresh = Math.max(session.expiresAt - Date.now() - 60000, 5000);
+    const timer = setTimeout(() => {
+      sbRefreshSession(session.refresh_token)
+        .then((data) => {
+          const next = buildSession(data);
+          setSession(next);
+          saveSessionToStorage(next);
+        })
+        .catch(() => {
+          setSession(null);
+          clearSessionFromStorage();
+        });
+    }, msUntilRefresh);
+    return () => clearTimeout(timer);
+  }, [session]);
+
   const signUp = async (email, password, fullName) => {
     setAuthLoading(true);
     setAuthError("");
     try {
       const data = await sbSignUp(email, password, fullName);
       if (data.access_token) {
-        const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+        const next = buildSession(data);
         setSession(next);
         saveSessionToStorage(next);
       }
@@ -909,7 +947,7 @@ function AuthProvider({ children }) {
     setAuthError("");
     try {
       const data = await sbSignIn(email, password);
-      const next = { access_token: data.access_token, refresh_token: data.refresh_token, user: data.user };
+      const next = buildSession(data);
       setSession(next);
       saveSessionToStorage(next);
       return data;
