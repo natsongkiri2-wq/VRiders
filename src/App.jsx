@@ -366,10 +366,12 @@ const STRINGS = {
     },
     deposit: {
       header: "DEPOSIT REFUND TRACKER", none: "No deposit was held for this rental — nothing to refund.",
-      tracking: "Tracking", overdue: "Overdue", refunded: "Refunded",
+      tracking: "Tracking", overdue: "Overdue", refunded: "Refunded", partial: "Partial refund",
       overdueMsg: "This deposit is {duration} past the usual 48-hour refund window.",
       trackingMsg: "{supplier} usually refunds deposits within 48 hours. About {duration} left.",
       refundedMsg: "{supplier} marked this deposit as refunded on {date}.",
+      partialRefundedMsg: "{supplier} refunded {amount} VUV of your {total} VUV deposit on {date}.",
+      deductionReasonLabel: "Reason given:",
       flag: "Flag this to Efate Rides", reported: "Reported — we'll follow up with {supplier} on your behalf.",
       checkStatus: "Check for updates",
     },
@@ -422,6 +424,13 @@ const STRINGS = {
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       markRentalComplete: "Mark rental complete",
+      fullRefund: "Full refund", partialRefund: "Partial / deduct", cancel: "Cancel",
+      refundAmountLabel: "Refund amount (VUV)",
+      deductionReasonLabel: "Reason for deduction",
+      deductionReasonPlaceholder: "e.g. fuel not topped up, scratch on rear bumper",
+      confirmRefund: "Confirm refund",
+      refundAmountError: "Enter an amount between 0 and {max} VUV",
+      partialRefundedOn: "{amount} VUV of {total} VUV refunded on {date}",
       awaitingReturn: "Waiting on the customer to log return photos before this can be completed.",
       blockedDatesConflict: "You've blocked some or all of these dates on your availability calendar. Remove the block first if you're sure you want to accept this booking.",
       pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
@@ -605,10 +614,12 @@ const STRINGS = {
     },
     deposit: {
       header: "SUIVI DU REMBOURSEMENT DE CAUTION", none: "Aucune caution n'a été prélevée pour cette location — rien à rembourser.",
-      tracking: "En cours", overdue: "En retard", refunded: "Remboursée",
+      tracking: "En cours", overdue: "En retard", refunded: "Remboursée", partial: "Remboursement partiel",
       overdueMsg: "Cette caution est en retard de {duration} par rapport au délai habituel de 48 heures.",
       trackingMsg: "{supplier} rembourse généralement les cautions sous 48 heures. Il reste environ {duration}.",
       refundedMsg: "{supplier} a indiqué avoir remboursé cette caution le {date}.",
+      partialRefundedMsg: "{supplier} a remboursé {amount} VUV sur votre caution de {total} VUV le {date}.",
+      deductionReasonLabel: "Motif indiqué :",
       flag: "Signaler à Efate Rides", reported: "Signalé — nous allons faire le suivi avec {supplier} pour vous.",
       checkStatus: "Vérifier les mises à jour",
     },
@@ -661,6 +672,13 @@ const STRINGS = {
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       markRentalComplete: "Marquer la location comme terminée",
+      fullRefund: "Remboursement total", partialRefund: "Partiel / déduction", cancel: "Annuler",
+      refundAmountLabel: "Montant remboursé (VUV)",
+      deductionReasonLabel: "Motif de la déduction",
+      deductionReasonPlaceholder: "ex. plein d'essence non refait, rayure à l'arrière",
+      confirmRefund: "Confirmer le remboursement",
+      refundAmountError: "Indiquez un montant entre 0 et {max} VUV",
+      partialRefundedOn: "{amount} VUV sur {total} VUV remboursés le {date}",
       awaitingReturn: "En attente que le client enregistre les photos de retour avant de pouvoir terminer.",
       blockedDatesConflict: "Vous avez bloqué tout ou partie de ces dates dans votre calendrier de disponibilité. Retirez d'abord le blocage si vous êtes sûr de vouloir accepter cette réservation.",
       pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
@@ -1914,7 +1932,7 @@ function fmtDuration(ms) {
   return `${h}h ${m}m`;
 }
 
-function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, dispute, onFlagIssue, onCheckStatus, checking }) {
+function DepositTracker({ deposit, returnTime, depositRefundedAt, refundAmount, deductionReason, supplier, dispute, onFlagIssue, onCheckStatus, checking }) {
   const { t } = useLang();
   const windowHours = 48;
 
@@ -1924,6 +1942,11 @@ function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, disp
   const overdue = !depositRefundedAt && remainingMs < 0;
   const elapsedMs = now - returnTime;
   const pct = depositRefundedAt ? 100 : Math.min(100, Math.max(0, (elapsedMs / (windowHours * 3600000)) * 100));
+  // A refund is only "partial" once we actually know the refunded amount
+  // and it's less than the full deposit — older bookings (refunded before
+  // this feature existed) have no refund_amount on file, so they still
+  // read as a plain full refund rather than an unexplained partial one.
+  const isPartial = depositRefundedAt && refundAmount != null && refundAmount < deposit;
 
   return (
     <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
@@ -1941,9 +1964,9 @@ function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, disp
           <div className="flex items-center justify-between">
             <span style={{ ...mono, fontSize: 17, color: C.sand }}>{fmtVUV(deposit)} VUV</span>
             {depositRefundedAt ? (
-              <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.18)" }}>
-                <Check size={11} color={C.lagoon} />
-                <span style={{ ...body, fontSize: 10, fontWeight: 600, color: C.lagoon }}>{t("deposit.refunded")}</span>
+              <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ backgroundColor: isPartial ? "rgba(229,106,62,0.18)" : "rgba(46,158,134,0.18)" }}>
+                <Check size={11} color={isPartial ? C.coral : C.lagoon} />
+                <span style={{ ...body, fontSize: 10, fontWeight: 600, color: isPartial ? C.coralSoft : C.lagoon }}>{isPartial ? t("deposit.partial") : t("deposit.refunded")}</span>
               </span>
             ) : overdue ? (
               <span className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(217,82,122,0.2)" }}>
@@ -1964,11 +1987,19 @@ function DepositTracker({ deposit, returnTime, depositRefundedAt, supplier, disp
 
           <p style={{ ...body, fontSize: 12, color: C.mist, marginTop: 8, lineHeight: 1.5 }}>
             {depositRefundedAt
-              ? t("deposit.refundedMsg", { supplier, date: fmtTimestampShort(depositRefundedAt) })
+              ? isPartial
+                ? t("deposit.partialRefundedMsg", { supplier, amount: fmtVUV(refundAmount), total: fmtVUV(deposit), date: fmtTimestampShort(depositRefundedAt) })
+                : t("deposit.refundedMsg", { supplier, date: fmtTimestampShort(depositRefundedAt) })
               : overdue
                 ? t("deposit.overdueMsg", { duration: fmtDuration(remainingMs) })
                 : t("deposit.trackingMsg", { supplier, duration: fmtDuration(remainingMs) })}
           </p>
+
+          {isPartial && deductionReason && (
+            <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, marginTop: 4, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: C.sand }}>{t("deposit.deductionReasonLabel")}</span> {deductionReason}
+            </p>
+          )}
 
           {overdue && !dispute && !depositRefundedAt && (
             <button onClick={onFlagIssue}
@@ -2155,7 +2186,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
-  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null });
+  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null, refundAmount: null, deductionReason: null });
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [pickupDateFrom, setPickupDateFrom] = useState(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -2171,13 +2202,15 @@ function BookingModal({ v, resumeBooking, onClose }) {
     if (!SUPABASE_CONFIGURED || !bookingId) return;
     setCheckingStatus(true);
     try {
-      const rows = await sbSelect("bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at", query: `&id=eq.${bookingId}`, accessToken });
+      const rows = await sbSelect("bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason", query: `&id=eq.${bookingId}`, accessToken });
       if (rows[0]) {
         setBookingStatus(rows[0].status);
         setPickupDateFrom(rows[0].date_from);
         setDepositInfo({
           returnCompletedAt: rows[0].return_completed_at,
           depositRefundedAt: rows[0].deposit_refunded_at,
+          refundAmount: rows[0].deposit_refund_amount,
+          deductionReason: rows[0].deposit_deduction_reason,
         });
       }
     } catch (e) {
@@ -2512,6 +2545,8 @@ function BookingModal({ v, resumeBooking, onClose }) {
                 deposit={v.deposit}
                 returnTime={returnTime}
                 depositRefundedAt={depositInfo.depositRefundedAt}
+                refundAmount={depositInfo.refundAmount}
+                deductionReason={depositInfo.deductionReason}
                 supplier={v.supplier}
                 dispute={dispute}
                 onFlagIssue={() => setDisputeModalOpen(true)}
@@ -4061,7 +4096,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -4087,6 +4122,8 @@ function SupplierDashboard({ onOpenAuth }) {
           status: r.status,
           created_at: r.created_at,
           depositRefundedAt: r.deposit_refunded_at,
+          refundAmount: r.deposit_refund_amount,
+          deductionReason: r.deposit_deduction_reason,
           returnCompletedAt: r.return_completed_at,
           pickupNote: r.pickup_note,
           returnNote: r.return_note,
@@ -4171,18 +4208,39 @@ function SupplierDashboard({ onOpenAuth }) {
     setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
   };
   const [refundingId, setRefundingId] = useState(null);
+  // Which booking's inline refund form is open, and whether it's in the
+  // expanded "partial / deduct" state (vs. the one-tap full-refund path).
+  const [refundFormId, setRefundFormId] = useState(null);
+  const [refundMode, setRefundMode] = useState("full"); // "full" | "partial"
+  const [refundDraft, setRefundDraft] = useState({ amount: "", reason: "" });
+  const openRefundForm = (id, depositAmount) => {
+    setRefundFormId(id);
+    setRefundMode("full");
+    setRefundDraft({ amount: String(depositAmount), reason: "" });
+  };
+  const closeRefundForm = () => {
+    setRefundFormId(null);
+    setRefundMode("full");
+    setRefundDraft({ amount: "", reason: "" });
+  };
   // Wraps up a booking: marks the deposit refunded (when this vehicle
   // actually has one) and moves status to "completed", which is what
-  // unlocks the "rate this guest" prompt below.
-  const completeBooking = async (id, hasDeposit) => {
+  // unlocks the "rate this guest" prompt below. refundAmount/reason are
+  // only meaningful when hasDeposit is true — a full refund passes the
+  // whole deposit through with no reason, a partial one records both so
+  // the customer can see exactly what was deducted and why.
+  const completeBooking = async (id, hasDeposit, refundAmount, reason) => {
     if (!usingRealData) return;
     setRefundingId(id);
     const prev = reqs;
     const nowIso = new Date().toISOString();
-    const patch = hasDeposit ? { status: "completed", deposit_refunded_at: nowIso } : { status: "completed" };
+    const patch = hasDeposit
+      ? { status: "completed", deposit_refunded_at: nowIso, deposit_refund_amount: refundAmount, deposit_deduction_reason: reason ? reason.trim() : null }
+      : { status: "completed" };
     setReqs(reqs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     try {
       await sbUpdate("bookings", `id=eq.${id}`, patch, accessToken);
+      closeRefundForm();
     } catch (e) {
       setReqs(prev);
       setBookingsError(e.message);
@@ -4418,28 +4476,107 @@ function SupplierDashboard({ onOpenAuth }) {
                 )}
                 {r.status === "accepted" && (
                   <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
-                    {r.returnCompletedAt ? (
-                      <button onClick={() => completeBooking(r.id, r.depositAmount > 0)} disabled={refundingId === r.id}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
-                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
-                        {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
-                        {r.depositAmount > 0 ? t("supplier.markDepositRefunded") : t("supplier.markRentalComplete")}
-                      </button>
-                    ) : (
+                    {!r.returnCompletedAt ? (
                       <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55 }}>
                         {t("supplier.awaitingReturn")}
                       </span>
+                    ) : r.depositAmount === 0 ? (
+                      <button onClick={() => completeBooking(r.id, false)} disabled={refundingId === r.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
+                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
+                        {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
+                        {t("supplier.markRentalComplete")}
+                      </button>
+                    ) : refundFormId !== r.id ? (
+                      <button onClick={() => openRefundForm(r.id, r.depositAmount)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px]"
+                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
+                        <ShieldCheck size={11} /> {t("supplier.markDepositRefunded")}
+                      </button>
+                    ) : (
+                      <div className="rounded-lg p-3" style={{ backgroundColor: C.void, border: `1px solid ${C.line}` }}>
+                        <div className="flex gap-1.5 mb-2.5">
+                          <button
+                            onClick={() => setRefundMode("full")}
+                            className="flex-1 py-1.5 rounded-full text-[10.5px]"
+                            style={{ ...body, fontWeight: 600, backgroundColor: refundMode === "full" ? "rgba(46,158,134,0.18)" : "transparent", color: refundMode === "full" ? C.lagoon : C.mist, border: `1px solid ${refundMode === "full" ? C.lagoon : C.line}` }}
+                          >
+                            {t("supplier.fullRefund")}
+                          </button>
+                          <button
+                            onClick={() => setRefundMode("partial")}
+                            className="flex-1 py-1.5 rounded-full text-[10.5px]"
+                            style={{ ...body, fontWeight: 600, backgroundColor: refundMode === "partial" ? "rgba(229,106,62,0.18)" : "transparent", color: refundMode === "partial" ? C.coralSoft : C.mist, border: `1px solid ${refundMode === "partial" ? C.coral : C.line}` }}
+                          >
+                            {t("supplier.partialRefund")}
+                          </button>
+                        </div>
+
+                        {refundMode === "partial" && (
+                          <>
+                            <FieldLabel>{t("supplier.refundAmountLabel")}</FieldLabel>
+                            <input
+                              type="number" min={0} max={r.depositAmount} value={refundDraft.amount}
+                              onChange={(e) => setRefundDraft((d) => ({ ...d, amount: e.target.value }))}
+                              className="w-full px-2.5 py-1.5 rounded-lg outline-none mb-2.5" style={{ ...inputStyle, fontSize: 12.5 }}
+                            />
+                            <FieldLabel>{t("supplier.deductionReasonLabel")}</FieldLabel>
+                            <textarea
+                              value={refundDraft.reason} onChange={(e) => setRefundDraft((d) => ({ ...d, reason: e.target.value }))}
+                              placeholder={t("supplier.deductionReasonPlaceholder")} rows={2}
+                              className="w-full px-2.5 py-1.5 rounded-lg outline-none resize-none" style={{ ...inputStyle, fontSize: 12 }}
+                            />
+                          </>
+                        )}
+
+                        {(() => {
+                          const amountNum = Number(refundDraft.amount);
+                          const amountValid = refundDraft.amount !== "" && !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= r.depositAmount;
+                          return (
+                            <>
+                              {refundMode === "partial" && !amountValid && (
+                                <p style={{ ...body, fontSize: 10.5, color: C.hibiscus, marginTop: 6 }}>
+                                  {t("supplier.refundAmountError", { max: fmtVUV(r.depositAmount) })}
+                                </p>
+                              )}
+                              <div className="flex gap-2 mt-3">
+                                <button onClick={closeRefundForm} className="flex-1 py-1.5 rounded-lg text-[11px]" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                                  {t("supplier.cancel")}
+                                </button>
+                                <button
+                                  disabled={!amountValid || refundingId === r.id}
+                                  onClick={() => completeBooking(r.id, true, amountNum, refundDraft.reason)}
+                                  className="flex-1 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 disabled:opacity-40"
+                                  style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}
+                                >
+                                  {refundingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                                  {t("supplier.confirmRefund")}
+                                </button>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
                 )}
                 {r.status === "completed" && (
                   <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
                     {r.depositRefundedAt && (
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Check size={12} color={C.lagoon} />
-                        <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.75 }}>
-                          {t("supplier.depositRefundedOn", { date: fmtTimestampShort(r.depositRefundedAt) })}
-                        </span>
+                      <div className="mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <Check size={12} color={C.lagoon} />
+                          <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.75 }}>
+                            {r.refundAmount != null && r.refundAmount < r.depositAmount
+                              ? t("supplier.partialRefundedOn", { amount: fmtVUV(r.refundAmount), total: fmtVUV(r.depositAmount), date: fmtTimestampShort(r.depositRefundedAt) })
+                              : t("supplier.depositRefundedOn", { date: fmtTimestampShort(r.depositRefundedAt) })}
+                          </span>
+                        </div>
+                        {r.refundAmount != null && r.refundAmount < r.depositAmount && r.deductionReason && (
+                          <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 3, marginLeft: 18, lineHeight: 1.4 }}>
+                            {r.deductionReason}
+                          </p>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center justify-between">
