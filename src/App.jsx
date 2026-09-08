@@ -482,6 +482,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
+      depositOverdue: "{duration} overdue", overdueDepositsBanner: "{n} deposit(s) past the 48-hour refund window — your customers can already see this as overdue.",
       markRentalComplete: "Mark rental complete",
       fullRefund: "Full refund", partialRefund: "Partial / deduct", cancel: "Cancel",
       refundAmountLabel: "Refund amount (VUV)",
@@ -753,6 +754,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
+      depositOverdue: "en retard de {duration}", overdueDepositsBanner: "{n} caution(s) au-delà du délai de 48 heures — vos clients le voient déjà comme en retard.",
       markRentalComplete: "Marquer la location comme terminée",
       fullRefund: "Remboursement total", partialRefund: "Partiel / déduction", cancel: "Annuler",
       refundAmountLabel: "Montant remboursé (VUV)",
@@ -5000,6 +5002,13 @@ function SupplierDashboard({ onOpenAuth }) {
         return finishedAt && new Date(finishedAt) >= monthStart;
       }).length
     : 11;
+  // Mirrors the 48h-overdue check the customer's own DepositTracker uses,
+  // so a supplier gets the same nudge on their own dashboard instead of
+  // only ever hearing about it if the customer disputes it.
+  const overdueDepositCount = reqs.filter((r) =>
+    r.status === "accepted" && r.returnCompletedAt && r.depositAmount > 0 &&
+    Date.now() - new Date(r.returnCompletedAt).getTime() - 48 * 3600000 > 0
+  ).length;
 
   if (status !== "verified") {
     return <SupplierGate onOpenAuth={onOpenAuth} />;
@@ -5033,6 +5042,14 @@ function SupplierDashboard({ onOpenAuth }) {
           <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{disputesError}</span>
         </div>
       )}
+      {overdueDepositCount > 0 && (
+        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)", border: `1px solid ${C.hibiscus}` }}>
+          <AlertTriangle size={15} color={C.hibiscus} />
+          <span style={{ ...body, fontSize: 13, color: C.sand }}>
+            {t("supplier.overdueDepositsBanner", { n: overdueDepositCount })}
+          </span>
+        </div>
+      )}
 
       {justAdded && (
         <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ backgroundColor: "rgba(46,158,134,0.15)", border: `1px solid ${C.lagoon}` }}>
@@ -5062,6 +5079,14 @@ function SupplierDashboard({ onOpenAuth }) {
             {reqs.map((r) => {
               const custDigits = (r.customerPhone || "").replace(/[^0-9]/g, "");
               const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Efate Rides.`);
+              // Same 48h window the customer's own deposit tracker uses —
+              // until now only the customer could see when a deposit was
+              // running overdue; the supplier had no equivalent nudge on
+              // their own side to actually go refund it.
+              const depositOverdueMs = r.returnCompletedAt && r.depositAmount > 0
+                ? Date.now() - new Date(r.returnCompletedAt).getTime() - 48 * 3600000
+                : -1;
+              const depositOverdue = depositOverdueMs > 0;
               return (
               <div key={r.id} className="rounded-xl p-3.5" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
                 <div className="flex items-center justify-between">
@@ -5151,11 +5176,21 @@ function SupplierDashboard({ onOpenAuth }) {
                         {t("supplier.markRentalComplete")}
                       </button>
                     ) : refundFormId !== r.id ? (
-                      <button onClick={() => openRefundForm(r.id, r.depositAmount)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px]"
-                        style={{ ...body, fontWeight: 600, color: C.lagoon, border: `1px solid ${C.line}` }}>
-                        <ShieldCheck size={11} /> {t("supplier.markDepositRefunded")}
-                      </button>
+                      <div>
+                        {depositOverdue && (
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <AlertTriangle size={11} color={C.hibiscus} />
+                            <span style={{ ...body, fontSize: 10.5, fontWeight: 600, color: C.hibiscus }}>
+                              {t("supplier.depositOverdue", { duration: fmtDuration(depositOverdueMs) })}
+                            </span>
+                          </div>
+                        )}
+                        <button onClick={() => openRefundForm(r.id, r.depositAmount)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px]"
+                          style={{ ...body, fontWeight: 600, color: depositOverdue ? "#fff" : C.lagoon, backgroundColor: depositOverdue ? C.hibiscus : "transparent", border: `1px solid ${depositOverdue ? C.hibiscus : C.line}` }}>
+                          <ShieldCheck size={11} /> {t("supplier.markDepositRefunded")}
+                        </button>
+                      </div>
                     ) : (
                       <div className="rounded-lg p-3" style={{ backgroundColor: C.void, border: `1px solid ${C.line}` }}>
                         <div className="flex gap-1.5 mb-2.5">
