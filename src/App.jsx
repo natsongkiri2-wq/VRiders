@@ -495,6 +495,8 @@ const STRINGS = {
       pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
+      managePhotos: "Manage photos", addPhoto: "Add photo", removePhoto: "Remove photo", donePhotos: "Done",
+      photoLimitNote: "Up to {max} photos — customers see all of them on the listing.",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
       statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed", statusCancelled: "cancelled",
       cancelBooking: "Cancel booking", cancelBookingConfirm: "Cancel this booking? This can't be undone.", confirmCancelBooking: "Yes, cancel it",
@@ -764,6 +766,8 @@ const STRINGS = {
       pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
+      managePhotos: "Gérer les photos", addPhoto: "Ajouter une photo", removePhoto: "Supprimer la photo", donePhotos: "Terminé",
+      photoLimitNote: "Jusqu'à {max} photos — les clients les voient toutes sur l'annonce.",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
       statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée", statusCancelled: "annulée",
       cancelBooking: "Annuler la réservation", cancelBookingConfirm: "Annuler cette réservation ? Cette action est irréversible.", confirmCancelBooking: "Oui, annuler",
@@ -1894,10 +1898,62 @@ function MapView({ vehicles, onSelect, compareIds, onToggleCompare }) {
   );
 }
 
+// Vehicles can carry several photos (photo_urls is an array in the
+// schema), but until now every surface only ever read index [0] — a
+// supplier with 4 good photos of their vehicle had 3 of them invisible
+// to customers. This is the one surface that shows them all, with
+// previous/next arrows and dot indicators; cards elsewhere stay
+// single-image by design (there's no room for a gallery in a grid tile).
+function PhotoGallery({ photos, alt, height, fallbackColor, FallbackIcon }) {
+  const [index, setIndex] = useState(0);
+  const clamped = Math.min(index, Math.max(0, photos.length - 1));
+  const go = (delta) => setIndex((i) => (i + delta + photos.length) % photos.length);
+
+  if (!photos || photos.length === 0) {
+    return (
+      <div className={`${height} flex items-center justify-center`} style={{ backgroundColor: fallbackColor }}>
+        <FallbackIcon size={64} color="rgba(255,255,255,0.92)" strokeWidth={1.4} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${height} relative overflow-hidden`} style={{ backgroundColor: fallbackColor }}>
+      <img src={photos[clamped]} alt={alt} className="w-full h-full object-cover" />
+      {photos.length > 1 && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); go(-1); }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+            aria-label="Previous photo"
+          >
+            <ChevronLeft size={15} color="#fff" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); go(1); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+            aria-label="Next photo"
+          >
+            <ChevronRight size={15} color="#fff" />
+          </button>
+          <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+            {photos.map((_, i) => (
+              <div key={i} className="rounded-full" style={{ width: i === clamped ? 12 : 5, height: 5, backgroundColor: i === clamped ? "#fff" : "rgba(255,255,255,0.5)", transition: "width 0.15s" }} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function VehicleDetail({ v, onClose, onBook, idVerified }) {
   const { t } = useLang();
   const meta = TYPE_META[v.type];
   const Icon = meta.icon;
+  const photos = v.photoUrls && v.photoUrls.length ? v.photoUrls : v.photoUrl ? [v.photoUrl] : [];
   return (
     <div className="fixed inset-0 z-40 flex justify-end" style={{ backgroundColor: "rgba(9,17,15,0.6)" }} onClick={onClose}>
       <div
@@ -1905,12 +1961,8 @@ function VehicleDetail({ v, onClose, onBook, idVerified }) {
         className="w-full md:w-[440px] h-full overflow-y-auto"
         style={{ backgroundColor: C.sand }}
       >
-        <div className="h-44 flex items-center justify-center relative overflow-hidden" style={{ backgroundColor: meta.color }}>
-          {v.photoUrl ? (
-            <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
-          ) : (
-            <Icon size={64} color="rgba(255,255,255,0.92)" strokeWidth={1.4} />
-          )}
+        <div className="relative">
+          <PhotoGallery photos={photos} alt={v.name} height="h-44" fallbackColor={meta.color} FallbackIcon={Icon} />
           <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
             <X size={16} color="#fff" />
           </button>
@@ -1954,7 +2006,7 @@ function VehicleDetail({ v, onClose, onBook, idVerified }) {
             </p>
           </div>
 
-          {!v.photoUrl && (
+          {photos.length === 0 && (
             <div className="rounded-xl p-4 mt-3 flex items-start gap-2.5" style={{ backgroundColor: "#fff", border: `1px solid ${C.lineDark}` }}>
               <Camera size={16} color={C.inkSoft} className="mt-0.5 shrink-0" />
               <p style={{ ...body, fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
@@ -3415,6 +3467,67 @@ function AddVehicleModal({ onClose, onAdd }) {
   );
 }
 
+const MAX_VEHICLE_PHOTOS = 6;
+
+// Lets a supplier build up a real set of photos on a listing instead of
+// the old single "change photo" control, which just overwrote photo_urls
+// with a single-element array every time — so a vehicle could never have
+// more than one photo no matter how many times a supplier uploaded.
+function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, removingUrl }) {
+  const { t } = useLang();
+  const photos = vehicle.photoUrls || [];
+  const atLimit = photos.length >= MAX_VEHICLE_PHOTOS;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.65)" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl p-6" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex items-center justify-between mb-1">
+          <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{t("supplier.managePhotos")}</span>
+          <button onClick={onClose}><X size={18} color={C.mist} /></button>
+        </div>
+        <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.65, marginBottom: 14 }}>
+          {t("supplier.photoLimitNote", { max: MAX_VEHICLE_PHOTOS })}
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {photos.map((url) => (
+            <div key={url} className="relative rounded-lg overflow-hidden aspect-square" style={{ backgroundColor: C.void }}>
+              <img src={url} alt={vehicle.name} className="w-full h-full object-cover" />
+              <button
+                onClick={() => onRemove(url)}
+                disabled={removingUrl === url}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center disabled:opacity-50"
+                style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+                title={t("supplier.removePhoto")}
+              >
+                {removingUrl === url ? <Loader2 size={10} color="#fff" className="animate-spin" /> : <X size={10} color="#fff" />}
+              </button>
+            </div>
+          ))}
+          {!atLimit && (
+            <label
+              className="rounded-lg aspect-square flex flex-col items-center justify-center gap-1 cursor-pointer"
+              style={{ border: `1.5px dashed ${C.line}`, opacity: uploading ? 0.6 : 1 }}
+            >
+              {uploading ? <Loader2 size={16} color={C.mist} className="animate-spin" /> : <Plus size={16} color={C.mist} />}
+              <span style={{ ...body, fontSize: 9.5, color: C.mist }}>{t("supplier.addPhoto")}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onAdd(f); }}
+              />
+            </label>
+          )}
+        </div>
+        <button onClick={onClose} className="w-full mt-5 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
+          {t("supplier.donePhotos")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------- supplier dashboard ---------------------------------- */
 
 const COMMISSION_RATE = 0.08;
@@ -4489,30 +4602,49 @@ function SupplierDashboard({ onOpenAuth }) {
   const [disputesError, setDisputesError] = useState("");
   const [calendarVehicleId, setCalendarVehicleId] = useState(null);
   const [photoUploadingId, setPhotoUploadingId] = useState(null);
+  const [managingPhotosId, setManagingPhotosId] = useState(null);
+  const [removingPhotoUrl, setRemovingPhotoUrl] = useState(null);
 
   const usingRealData = SUPABASE_CONFIGURED && !!profile;
 
-  // Lets a supplier add or replace a photo on a listing that already
-  // exists (e.g. one created before photo upload existed, or a retake).
-  // Shows the picked file immediately via a data URL, then swaps it for
-  // the real Storage URL once the upload finishes.
-  const handlePhotoChange = async (vehicleId, file) => {
+  // Appends a new photo to a listing's photo_urls array — each upload
+  // used to overwrite the array with a single-element one, which is how
+  // a vehicle could never end up with more than one photo. Every photo
+  // gets its own storage path (timestamp + random suffix) so uploads
+  // never collide or silently replace an earlier one.
+  const addVehiclePhoto = async (vehicleId, file) => {
     if (!file || !usingRealData) return;
-    const preview = await fileToDataUrl(file);
-    setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrl: preview } : v)));
     setPhotoUploadingId(vehicleId);
     try {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${profile.user_id}/${vehicleId}.${ext}`;
+      const path = `${profile.user_id}/${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
       const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
-      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: [url] }, accessToken);
-      setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrl: url } : v)));
+      const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
+      const nextUrls = [...current, url];
+      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
+      setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrls: nextUrls, photoUrl: v.photoUrl || url } : v)));
     } catch (e) {
-      // Keep the local preview showing even if the upload failed — the
-      // supplier can retry; we just log so it's visible while debugging.
       console.error("Vehicle photo upload failed:", e.message);
     } finally {
       setPhotoUploadingId(null);
+    }
+  };
+
+  // Drops one photo from a listing's photo_urls array. Doesn't delete the
+  // underlying Storage object — the old single-photo flow never cleaned
+  // those up either, so this isn't a regression, just not solved here.
+  const removeVehiclePhoto = async (vehicleId, url) => {
+    if (!usingRealData) return;
+    setRemovingPhotoUrl(url);
+    const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
+    const nextUrls = current.filter((u) => u !== url);
+    try {
+      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
+      setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrls: nextUrls, photoUrl: nextUrls[0] || null } : v)));
+    } catch (e) {
+      console.error("Removing vehicle photo failed:", e.message);
+    } finally {
+      setRemovingPhotoUrl(null);
     }
   };
 
@@ -4561,6 +4693,7 @@ function SupplierDashboard({ onOpenAuth }) {
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
+          photoUrls: r.photo_urls || [],
         }));
         setMyVehicles(mapped);
         setCalendarVehicleId((prev) => prev && mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id);
@@ -4838,7 +4971,7 @@ function SupplierDashboard({ onOpenAuth }) {
           verified: r.verified, rating: 0, reviews: 0,
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
-          photoUrl,
+          photoUrl, photoUrls: photoUrl ? [photoUrl] : [],
         };
         setMyVehicles((prev) => [mapped, ...prev]);
         setCalendarVehicleId((prev) => prev || mapped.id);
@@ -4848,7 +4981,7 @@ function SupplierDashboard({ onOpenAuth }) {
         return;
       }
     } else {
-      setMyVehicles([{ ...vehicle, photoUrl: vehicle.photoPreview || null }, ...myVehicles]);
+      setMyVehicles([{ ...vehicle, photoUrl: vehicle.photoPreview || null, photoUrls: vehicle.photoPreview ? [vehicle.photoPreview] : [] }, ...myVehicles]);
     }
     setShowAdd(false);
     setJustAdded(vehicle.name);
@@ -5171,12 +5304,14 @@ function SupplierDashboard({ onOpenAuth }) {
               const meta = TYPE_META[v.type];
               const Icon = meta.icon;
               const uploading = photoUploadingId === v.id;
+              const photoCount = (v.photoUrls || []).length;
               return (
                 <div key={v.id} className="rounded-xl p-3.5 flex items-center gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
-                  <label
-                    className="w-11 h-11 rounded-lg relative overflow-hidden shrink-0 cursor-pointer flex items-center justify-center"
+                  <button
+                    onClick={() => setManagingPhotosId(v.id)}
+                    className="w-11 h-11 rounded-lg relative overflow-hidden shrink-0 flex items-center justify-center"
                     style={{ backgroundColor: meta.color }}
-                    title={t("supplier.changePhoto")}
+                    title={t("supplier.managePhotos")}
                   >
                     {v.photoUrl ? (
                       <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
@@ -5186,13 +5321,12 @@ function SupplierDashboard({ onOpenAuth }) {
                     <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
                       {uploading ? <Loader2 size={13} color="#fff" className="animate-spin" /> : <Camera size={13} color="#fff" />}
                     </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => handlePhotoChange(v.id, e.target.files && e.target.files[0])}
-                    />
-                  </label>
+                    {photoCount > 1 && (
+                      <span className="absolute bottom-0.5 right-0.5 px-1 rounded-full text-[8.5px]" style={{ ...body, fontWeight: 700, backgroundColor: "rgba(0,0,0,0.6)", color: "#fff" }}>
+                        {photoCount}
+                      </span>
+                    )}
+                  </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <div style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13.5 }}>{v.name}</div>
@@ -5261,6 +5395,20 @@ function SupplierDashboard({ onOpenAuth }) {
       </div>
 
       {showAdd && <AddVehicleModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
+      {managingPhotosId && (() => {
+        const vehicle = myVehicles.find((v) => v.id === managingPhotosId);
+        if (!vehicle) return null;
+        return (
+          <ManagePhotosModal
+            vehicle={vehicle}
+            onClose={() => setManagingPhotosId(null)}
+            onAdd={(file) => addVehiclePhoto(managingPhotosId, file)}
+            onRemove={(url) => removeVehiclePhoto(managingPhotosId, url)}
+            uploading={photoUploadingId === managingPhotosId}
+            removingUrl={removingPhotoUrl}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -5455,6 +5603,7 @@ function AppInner() {
           price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
+          photoUrls: r.photo_urls || [],
         })));
       })
       .catch((e) => setVehiclesError(e.message))
