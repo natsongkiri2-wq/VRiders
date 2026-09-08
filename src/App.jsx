@@ -225,6 +225,47 @@ async function sbRefreshSession(refreshToken) {
   }));
 }
 
+// Kicks off Supabase's built-in "reset password" email. redirectTo is where
+// the link in that email sends the person back to — GoTrue appends the
+// recovery tokens to it as a URL fragment (#access_token=...&type=recovery),
+// which AuthProvider picks up on load to drive the "set new password" step.
+async function sbRecoverPassword(email, redirectTo) {
+  const url = `${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`;
+  await sbHandle(await fetch(url, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  }));
+}
+
+// Sets a new password on the currently-authenticated account. Used both for
+// a normal signed-in password change and — with the short-lived access
+// token GoTrue puts in the recovery email link — for finishing a password
+// reset, since following that link signs the person in well enough to call
+// this.
+async function sbUpdatePassword(newPassword, accessToken) {
+  const url = `${SUPABASE_URL}/auth/v1/user`;
+  return sbHandle(await fetch(url, {
+    method: "PUT",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password: newPassword }),
+  }));
+}
+
+// Parses the #access_token=...&refresh_token=...&type=recovery fragment
+// Supabase appends to the redirect URL from a password-reset email. Returns
+// null for an ordinary page load with no such fragment.
+function parseRecoveryHash() {
+  if (typeof window === "undefined" || !window.location.hash) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (params.get("type") !== "recovery" || !params.get("access_token")) return null;
+  return {
+    access_token: params.get("access_token"),
+    refresh_token: params.get("refresh_token"),
+    expires_in: Number(params.get("expires_in")) || 3600,
+  };
+}
+
 const SESSION_STORAGE_KEY = "efate_rides_session";
 
 function saveSessionToStorage(session) {
@@ -276,6 +317,18 @@ const STRINGS = {
       submitSignIn: "Sign in", submitSignUp: "Create account",
       switchToSignUp: "New here? Create an account", switchToSignIn: "Already have an account? Sign in",
       notConfigured: "Backend not connected yet — add your Supabase URL and key to enable real accounts.",
+      forgotPassword: "Forgot password?",
+      forgotTitle: "Reset your password",
+      forgotBody: "Enter the email on your account and we'll send you a link to set a new password.",
+      sendResetLink: "Send reset link",
+      resetSent: "Check your inbox — we've sent a link to {email} to reset your password.",
+      backToSignIn: "Back to sign in",
+      resetTitle: "Set a new password",
+      resetBody: "You followed a password reset link. Choose a new password for your account.",
+      newPassword: "New password", confirmPassword: "Confirm new password",
+      passwordMismatch: "Passwords don't match.",
+      setNewPassword: "Set new password",
+      resetDone: "Password updated — you're signed in.",
     },
     admin: {
       nav: "Admin",
@@ -524,6 +577,18 @@ const STRINGS = {
       submitSignIn: "Se connecter", submitSignUp: "Créer un compte",
       switchToSignUp: "Nouveau ici ? Créer un compte", switchToSignIn: "Déjà un compte ? Se connecter",
       notConfigured: "Backend pas encore connecté — ajoutez votre URL et clé Supabase pour activer les vrais comptes.",
+      forgotPassword: "Mot de passe oublié ?",
+      forgotTitle: "Réinitialiser votre mot de passe",
+      forgotBody: "Indiquez l'e-mail de votre compte et nous vous enverrons un lien pour choisir un nouveau mot de passe.",
+      sendResetLink: "Envoyer le lien",
+      resetSent: "Vérifiez votre boîte mail — un lien a été envoyé à {email} pour réinitialiser votre mot de passe.",
+      backToSignIn: "Retour à la connexion",
+      resetTitle: "Choisir un nouveau mot de passe",
+      resetBody: "Vous avez suivi un lien de réinitialisation. Choisissez un nouveau mot de passe pour votre compte.",
+      newPassword: "Nouveau mot de passe", confirmPassword: "Confirmer le nouveau mot de passe",
+      passwordMismatch: "Les mots de passe ne correspondent pas.",
+      setNewPassword: "Valider le nouveau mot de passe",
+      resetDone: "Mot de passe mis à jour — vous êtes connecté(e).",
     },
     admin: {
       nav: "Admin",
@@ -881,8 +946,31 @@ function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [restoringSession, setRestoringSession] = useState(true);
+  // True from the moment a password-reset email link lands back on the app
+  // until the person actually sets a new password — used to force the "set
+  // new password" screen open instead of dropping them on the homepage
+  // signed in via a one-off recovery token they never meant to keep.
+  const [passwordResetPending, setPasswordResetPending] = useState(false);
 
   useEffect(() => {
+    // A password-reset email link takes priority over any saved session —
+    // it puts the actual tokens straight in the URL fragment, so there's
+    // nothing to restore-and-refresh here, just adopt them directly.
+    const recovery = parseRecoveryHash();
+    if (recovery) {
+      const next = buildSession(recovery);
+      setSession(next);
+      saveSessionToStorage(next);
+      setPasswordResetPending(true);
+      setRestoringSession(false);
+      // Strip the tokens out of the address bar immediately — they're
+      // short-lived, but there's no reason to leave them sitting in the
+      // URL (and browser history) once we've read them.
+      if (typeof window !== "undefined" && window.history) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      return;
+    }
     const saved = loadSessionFromStorage();
     if (!saved || !saved.refresh_token) {
       setRestoringSession(false);
@@ -961,7 +1049,45 @@ function AuthProvider({ children }) {
 
   const signOut = () => {
     setSession(null);
+    setPasswordResetPending(false);
     clearSessionFromStorage();
+  };
+
+  // Sends Supabase's built-in reset-password email, pointed back at this
+  // same page (whatever path/host the person is actually on) so the link
+  // lands somewhere real rather than a hardcoded URL.
+  const recoverPassword = async (email) => {
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const redirectTo = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
+      await sbRecoverPassword(email, redirectTo);
+    } catch (e) {
+      setAuthError(e.message);
+      throw e;
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Finishes a password reset (or a normal signed-in password change) using
+  // whatever access token the current session already holds — for the
+  // reset flow that's the short-lived one from the email link.
+  const updatePassword = async (newPassword) => {
+    if (!session) throw new Error("Not signed in.");
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const data = await sbUpdatePassword(newPassword, session.access_token);
+      setSession((prev) => (prev ? { ...prev, user: data } : prev));
+      setPasswordResetPending(false);
+      return data;
+    } catch (e) {
+      setAuthError(e.message);
+      throw e;
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   // Realtime subscriptions enforce RLS using this token, same as every
@@ -976,6 +1102,7 @@ function AuthProvider({ children }) {
       session, user: session ? session.user : null,
       accessToken: session ? session.access_token : null,
       signUp, signIn, signOut, authLoading, authError, setAuthError, restoringSession,
+      recoverPassword, updatePassword, passwordResetPending,
     }}>
       {children}
     </AuthContext.Provider>
@@ -984,30 +1111,70 @@ function AuthProvider({ children }) {
 
 function AuthModal({ onClose }) {
   const { t } = useLang();
-  const { signUp, signIn, authLoading, authError, setAuthError } = useAuth();
-  const [mode, setMode] = useState("signin"); // signin | signup
+  const { signUp, signIn, authLoading, authError, setAuthError, recoverPassword, updatePassword, passwordResetPending } = useAuth();
+  // signin | signup | forgot | reset. A password-reset email link forces
+  // this open on "reset" regardless of how the modal got opened — someone
+  // who just clicked that link doesn't need to see a sign-in form first.
+  const [mode, setMode] = useState(passwordResetPending ? "reset" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetSentTo, setResetSentTo] = useState("");
+  const [resetDone, setResetDone] = useState(false);
+
+  useEffect(() => {
+    if (passwordResetPending) setMode("reset");
+  }, [passwordResetPending]);
+
+  const switchMode = (next) => {
+    setMode(next);
+    setAuthError("");
+  };
 
   const submit = async () => {
     try {
-      if (mode === "signup") await signUp(email, password, fullName);
-      else await signIn(email, password);
-      onClose();
+      if (mode === "signup") {
+        await signUp(email, password, fullName);
+        onClose();
+      } else if (mode === "forgot") {
+        await recoverPassword(email);
+        setResetSentTo(email);
+      } else if (mode === "reset") {
+        if (newPassword !== confirmPassword) {
+          setAuthError(t("auth.passwordMismatch"));
+          return;
+        }
+        await updatePassword(newPassword);
+        setResetDone(true);
+      } else {
+        await signIn(email, password);
+        onClose();
+      }
     } catch (e) {
       // error already captured in authError
     }
   };
 
+  const titleKey = { signin: "auth.signIn", signup: "auth.signUp", forgot: "auth.forgotTitle", reset: "auth.resetTitle" }[mode];
+  // While a reset is actively pending, closing the modal would just strand
+  // the person signed in via the one-off recovery token without ever
+  // setting a real password — let them finish (or explicitly sign out
+  // instead, once closed) rather than dismiss it by accident.
+  const dismissable = !passwordResetPending || resetDone;
+  const handleBackdropClick = dismissable ? onClose : undefined;
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.7)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.7)" }} onClick={handleBackdropClick}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl p-6" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
         <div className="flex items-center justify-between mb-4">
           <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>
-            {mode === "signin" ? t("auth.signIn") : t("auth.signUp")}
+            {t(titleKey)}
           </span>
-          <button onClick={onClose}><X size={18} color={C.mist} /></button>
+          {dismissable && (
+            <button onClick={onClose}><X size={18} color={C.mist} /></button>
+          )}
         </div>
 
         {!SUPABASE_CONFIGURED && (
@@ -1016,48 +1183,123 @@ function AuthModal({ onClose }) {
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
-          {mode === "signup" && (
-            <div>
-              <FieldLabel>{t("auth.fullName")}</FieldLabel>
-              <input value={fullName} onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+        {mode === "forgot" && resetSentTo ? (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
+              <span style={{ ...body, fontSize: 12, color: C.lagoon, lineHeight: 1.5 }}>{t("auth.resetSent", { email: resetSentTo })}</span>
             </div>
-          )}
-          <div>
-            <FieldLabel>{t("auth.email")}</FieldLabel>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+            <button onClick={() => switchMode("signin")} className="text-center" style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7 }}>
+              {t("auth.backToSignIn")}
+            </button>
           </div>
-          <div>
-            <FieldLabel>{t("auth.password")}</FieldLabel>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
-          </div>
-
-          {authError && (
-            <div className="rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-              <span style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{authError}</span>
+        ) : mode === "reset" && resetDone ? (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
+              <span style={{ ...body, fontSize: 12, color: C.lagoon }}>{t("auth.resetDone")}</span>
             </div>
-          )}
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
+              style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
+            >
+              {t("booking.done")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {mode === "forgot" && (
+              <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.75, lineHeight: 1.5 }}>{t("auth.forgotBody")}</p>
+            )}
+            {mode === "reset" && (
+              <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.75, lineHeight: 1.5 }}>{t("auth.resetBody")}</p>
+            )}
 
-          <button
-            disabled={authLoading || !email || !password || (mode === "signup" && !fullName)}
-            onClick={submit}
-            className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
-            style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
-          >
-            {authLoading ? <Loader2 size={15} className="animate-spin" /> : (mode === "signin" ? t("auth.submitSignIn") : t("auth.submitSignUp"))}
-          </button>
+            {mode === "signup" && (
+              <div>
+                <FieldLabel>{t("auth.fullName")}</FieldLabel>
+                <input value={fullName} onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+              </div>
+            )}
 
-          <button
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setAuthError(""); }}
-            className="text-center"
-            style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7 }}
-          >
-            {mode === "signin" ? t("auth.switchToSignUp") : t("auth.switchToSignIn")}
-          </button>
-        </div>
+            {(mode === "signin" || mode === "signup" || mode === "forgot") && (
+              <div>
+                <FieldLabel>{t("auth.email")}</FieldLabel>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+              </div>
+            )}
+
+            {(mode === "signin" || mode === "signup") && (
+              <div>
+                <FieldLabel>{t("auth.password")}</FieldLabel>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+              </div>
+            )}
+
+            {mode === "reset" && (
+              <>
+                <div>
+                  <FieldLabel>{t("auth.newPassword")}</FieldLabel>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                </div>
+                <div>
+                  <FieldLabel>{t("auth.confirmPassword")}</FieldLabel>
+                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                </div>
+              </>
+            )}
+
+            {authError && (
+              <div className="rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+                <span style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{authError}</span>
+              </div>
+            )}
+
+            <button
+              disabled={
+                authLoading ||
+                (mode === "signin" && (!email || !password)) ||
+                (mode === "signup" && (!email || !password || !fullName)) ||
+                (mode === "forgot" && !email) ||
+                (mode === "reset" && (!newPassword || !confirmPassword))
+              }
+              onClick={submit}
+              className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+              style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
+            >
+              {authLoading ? <Loader2 size={15} className="animate-spin" /> : (
+                mode === "signin" ? t("auth.submitSignIn") :
+                mode === "signup" ? t("auth.submitSignUp") :
+                mode === "forgot" ? t("auth.sendResetLink") :
+                t("auth.setNewPassword")
+              )}
+            </button>
+
+            {mode === "signin" && (
+              <button onClick={() => switchMode("forgot")} className="text-center" style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7 }}>
+                {t("auth.forgotPassword")}
+              </button>
+            )}
+            {mode === "forgot" && (
+              <button onClick={() => switchMode("signin")} className="text-center" style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7 }}>
+                {t("auth.backToSignIn")}
+              </button>
+            )}
+            {(mode === "signin" || mode === "signup") && (
+              <button
+                onClick={() => switchMode(mode === "signin" ? "signup" : "signin")}
+                className="text-center"
+                style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7 }}
+              >
+                {mode === "signin" ? t("auth.switchToSignUp") : t("auth.switchToSignIn")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4904,7 +5146,7 @@ function MyBookings({ onResume }) {
 
 function AppInner() {
   const { t } = useLang();
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, passwordResetPending } = useAuth();
   const [mode, setMode] = useState("renter");
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
@@ -4921,6 +5163,14 @@ function AppInner() {
   const [compareIds, setCompareIds] = useState([]);
   const [showCompare, setShowCompare] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+
+  // A password-reset email link lands here with the recovery tokens already
+  // adopted as the current session (AuthProvider does that on mount) — pop
+  // the auth modal open straight to its "set new password" step rather
+  // than leaving the person on the homepage wondering if the link worked.
+  useEffect(() => {
+    if (passwordResetPending) setShowAuth(true);
+  }, [passwordResetPending]);
 
   // Read the customer's real verification status from their profile, so
   // a returning customer on any device sees themself as already verified
