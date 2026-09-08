@@ -415,6 +415,8 @@ const STRINGS = {
       waitingNote: "Waiting for {supplier} to confirm — pickup and return photos will be available here once your booking is accepted.",
       tooEarlyNote: "Pickup photos will be available here starting {date} — check back once you're actually collecting the vehicle.",
       declinedNote: "This request wasn't accepted, so there's nothing to log here. Browse other vehicles to find another option.",
+      cancelBooking: "Cancel this booking", cancelConfirm: "Cancel this booking? This can't be undone.", cancelYes: "Yes, cancel it", cancelNo: "Never mind",
+      cancelledByYouNote: "You cancelled this booking.", cancelledBySupplierNote: "{supplier} cancelled this booking.",
       done: "Done",
     },
     deposit: {
@@ -490,7 +492,9 @@ const STRINGS = {
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
-      statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed",
+      statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed", statusCancelled: "cancelled",
+      cancelBooking: "Cancel booking", cancelBookingConfirm: "Cancel this booking? This can't be undone.", confirmCancelBooking: "Yes, cancel it",
+      cancelledOn: "cancelled {date}", cancelledByYouNote: "You cancelled this booking.", cancelledByCustomerNote: "The customer cancelled this booking.",
       openDisputes: "Reported issues", noDisputes: "No disputes — nothing to see here.",
       disputesHeading: "Disputes", disputesOpenCount: "{n} open",
       calendarHeading: "Availability calendar", selectVehicle: "Vehicle",
@@ -675,6 +679,8 @@ const STRINGS = {
       waitingNote: "En attente de confirmation de {supplier} — les photos de départ et de retour seront disponibles ici une fois votre réservation acceptée.",
       tooEarlyNote: "Les photos de départ seront disponibles ici à partir du {date} — revenez une fois que vous récupérez réellement le véhicule.",
       declinedNote: "Cette demande n'a pas été acceptée, il n'y a donc rien à enregistrer ici. Parcourez d'autres véhicules pour trouver une autre option.",
+      cancelBooking: "Annuler cette réservation", cancelConfirm: "Annuler cette réservation ? Cette action est irréversible.", cancelYes: "Oui, annuler", cancelNo: "Laisser tomber",
+      cancelledByYouNote: "Vous avez annulé cette réservation.", cancelledBySupplierNote: "{supplier} a annulé cette réservation.",
       done: "Terminé",
     },
     deposit: {
@@ -750,7 +756,9 @@ const STRINGS = {
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
-      statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée",
+      statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée", statusCancelled: "annulée",
+      cancelBooking: "Annuler la réservation", cancelBookingConfirm: "Annuler cette réservation ? Cette action est irréversible.", confirmCancelBooking: "Oui, annuler",
+      cancelledOn: "annulée le {date}", cancelledByYouNote: "Vous avez annulé cette réservation.", cancelledByCustomerNote: "Le client a annulé cette réservation.",
       openDisputes: "Problèmes signalés", noDisputes: "Aucun litige — rien à signaler ici.",
       disputesHeading: "Litiges", disputesOpenCount: "{n} en cours",
       calendarHeading: "Calendrier de disponibilité", selectVehicle: "Véhicule",
@@ -1456,6 +1464,7 @@ function bookingStatusLabel(t, s) {
   if (s === "accepted") return t("supplier.statusAccepted");
   if (s === "declined") return t("supplier.statusDeclined");
   if (s === "completed") return t("supplier.statusCompleted");
+  if (s === "cancelled") return t("supplier.statusCancelled");
   return t("supplier.statusPending");
 }
 
@@ -2478,10 +2487,12 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
-  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null, refundAmount: null, deductionReason: null });
+  const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null, refundAmount: null, deductionReason: null, cancelledBy: null, cancelledAt: null });
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [pickupDateFrom, setPickupDateFrom] = useState(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   // Prefer the real, persisted return timestamp so the 48h countdown
   // survives a page refresh; only fall back to the local photo timestamps
   // if that hasn't loaded yet (or there's no backend to load it from).
@@ -2494,7 +2505,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
     if (!SUPABASE_CONFIGURED || !bookingId) return;
     setCheckingStatus(true);
     try {
-      const rows = await sbSelect("bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason", query: `&id=eq.${bookingId}`, accessToken });
+      const rows = await sbSelect("bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at", query: `&id=eq.${bookingId}`, accessToken });
       if (rows[0]) {
         setBookingStatus(rows[0].status);
         setPickupDateFrom(rows[0].date_from);
@@ -2503,12 +2514,32 @@ function BookingModal({ v, resumeBooking, onClose }) {
           depositRefundedAt: rows[0].deposit_refunded_at,
           refundAmount: rows[0].deposit_refund_amount,
           deductionReason: rows[0].deposit_deduction_reason,
+          cancelledBy: rows[0].cancelled_by,
+          cancelledAt: rows[0].cancelled_at,
         });
       }
     } catch (e) {
       console.error("Checking deposit status failed:", e.message);
     } finally {
       setCheckingStatus(false);
+    }
+  };
+  // Lets the customer call off a booking themselves while it's still
+  // pending, or accepted but before pickup — no deposit is ever collected
+  // until physical pickup, so there's nothing to refund here.
+  const cancelBooking = async () => {
+    if (!SUPABASE_CONFIGURED || !bookingId) return;
+    setCancelling(true);
+    try {
+      const nowIso = new Date().toISOString();
+      await sbUpdate("bookings", `id=eq.${bookingId}`, { status: "cancelled", cancelled_by: "customer", cancelled_at: nowIso }, accessToken);
+      setBookingStatus("cancelled");
+      setDepositInfo((d) => ({ ...d, cancelledBy: "customer", cancelledAt: nowIso }));
+      setShowCancelConfirm(false);
+    } catch (e) {
+      console.error("Cancelling booking failed:", e.message);
+    } finally {
+      setCancelling(false);
     }
   };
   // Fetch status as soon as we have a real booking to check, and keep it
@@ -2758,7 +2789,16 @@ function BookingModal({ v, resumeBooking, onClose }) {
               </p>
             )}
 
-            {bookingStatus === "declined" ? (
+            {bookingStatus === "cancelled" ? (
+              <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
+                <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
+                  <Info size={16} color={C.mist} className="mt-0.5 shrink-0" />
+                  <p style={{ ...body, fontSize: 12.5, color: C.mist, lineHeight: 1.6 }}>
+                    {depositInfo.cancelledBy === "customer" ? t("booking.cancelledByYouNote") : t("booking.cancelledBySupplierNote", { supplier: v.supplier })}
+                  </p>
+                </div>
+              </div>
+            ) : bookingStatus === "declined" ? (
               <div className="mt-6 pt-5 text-left" style={{ borderTop: `1px solid ${C.line}` }}>
                 <div className="rounded-xl p-4 flex items-start gap-2.5" style={{ backgroundColor: C.panelSoft }}>
                   <Info size={16} color={C.mist} className="mt-0.5 shrink-0" />
@@ -2830,6 +2870,42 @@ function BookingModal({ v, resumeBooking, onClose }) {
                 {t("booking.conditionFooter")}
               </p>
             </div>
+            )}
+
+            {!["declined", "completed", "cancelled"].includes(bookingStatus) && !pickupDone && (
+              <div className="mt-4 text-left">
+                {showCancelConfirm ? (
+                  <div className="rounded-xl p-4" style={{ backgroundColor: C.panelSoft, border: `1px solid ${C.hibiscus}` }}>
+                    <p style={{ ...body, fontSize: 12, color: C.sand, lineHeight: 1.6 }}>{t("booking.cancelConfirm")}</p>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => setShowCancelConfirm(false)}
+                        className="flex-1 py-2 rounded-lg text-[12px]"
+                        style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}
+                      >
+                        {t("booking.cancelNo")}
+                      </button>
+                      <button
+                        disabled={cancelling}
+                        onClick={cancelBooking}
+                        className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}
+                      >
+                        {cancelling ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                        {t("booking.cancelYes")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="text-[11.5px]"
+                    style={{ ...body, fontWeight: 600, color: C.mist, opacity: 0.6 }}
+                  >
+                    {t("booking.cancelBooking")}
+                  </button>
+                )}
+              </div>
             )}
 
             {returnDone && (
@@ -4388,7 +4464,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("bookings", {
-        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -4416,6 +4492,8 @@ function SupplierDashboard({ onOpenAuth }) {
           depositRefundedAt: r.deposit_refunded_at,
           refundAmount: r.deposit_refund_amount,
           deductionReason: r.deposit_deduction_reason,
+          cancelledBy: r.cancelled_by,
+          cancelledAt: r.cancelled_at,
           returnCompletedAt: r.return_completed_at,
           pickupNote: r.pickup_note,
           returnNote: r.return_note,
@@ -4540,6 +4618,30 @@ function SupplierDashboard({ onOpenAuth }) {
       setRefundingId(null);
     }
   };
+
+  // Calls off an accepted booking before it's actually gone anywhere — no
+  // deposit was ever taken (that happens at pickup), so there's nothing to
+  // refund here, just a status flip the customer sees immediately.
+  const [cancellingId, setCancellingId] = useState(null);
+  const [cancelFormId, setCancelFormId] = useState(null);
+  const cancelBookingBySupplier = async (id) => {
+    if (!usingRealData) return;
+    setCancellingId(id);
+    const prev = reqs;
+    const nowIso = new Date().toISOString();
+    const patch = { status: "cancelled", cancelled_by: "supplier", cancelled_at: nowIso };
+    setReqs(reqs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    try {
+      await sbUpdate("bookings", `id=eq.${id}`, patch, accessToken);
+      setCancelFormId(null);
+    } catch (e) {
+      setReqs(prev);
+      setBookingsError(e.message);
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const [ratingId, setRatingId] = useState(null);
   const rateCustomer = async (id, customerId, rating) => {
     if (!usingRealData) return;
@@ -4768,9 +4870,34 @@ function SupplierDashboard({ onOpenAuth }) {
                 {r.status === "accepted" && (
                   <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
                     {!r.returnCompletedAt ? (
-                      <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55 }}>
-                        {t("supplier.awaitingReturn")}
-                      </span>
+                      cancelFormId === r.id ? (
+                        <div className="rounded-lg p-3" style={{ backgroundColor: C.void, border: `1px solid ${C.hibiscus}` }}>
+                          <p style={{ ...body, fontSize: 11.5, color: C.sand, lineHeight: 1.5 }}>{t("supplier.cancelBookingConfirm")}</p>
+                          <div className="flex gap-2 mt-2.5">
+                            <button onClick={() => setCancelFormId(null)} className="flex-1 py-1.5 rounded-lg text-[11px]" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                              {t("supplier.cancel")}
+                            </button>
+                            <button
+                              disabled={cancellingId === r.id}
+                              onClick={() => cancelBookingBySupplier(r.id)}
+                              className="flex-1 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}
+                            >
+                              {cancellingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                              {t("supplier.confirmCancelBooking")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55 }}>
+                            {t("supplier.awaitingReturn")}
+                          </span>
+                          <button onClick={() => setCancelFormId(r.id)} className="text-[10.5px] shrink-0" style={{ ...body, fontWeight: 600, color: C.mist, opacity: 0.5 }}>
+                            {t("supplier.cancelBooking")}
+                          </button>
+                        </div>
+                      )
                     ) : r.depositAmount === 0 ? (
                       <button onClick={() => completeBooking(r.id, false)} disabled={refundingId === r.id}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] disabled:opacity-50"
@@ -4882,6 +5009,14 @@ function SupplierDashboard({ onOpenAuth }) {
                         <StarRatingInput value={0} onChange={(n) => rateCustomer(r.id, r.customerId, n)} size={15} />
                       )}
                     </div>
+                  </div>
+                )}
+                {r.status === "cancelled" && (
+                  <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.7 }}>
+                      {r.cancelledBy === "supplier" ? t("supplier.cancelledByYouNote") : t("supplier.cancelledByCustomerNote")}
+                      {r.cancelledAt ? ` · ${t("supplier.cancelledOn", { date: fmtTimestampShort(r.cancelledAt) })}` : ""}
+                    </span>
                   </div>
                 )}
               </div>
@@ -5104,7 +5239,7 @@ function MyBookings({ onResume }) {
                       <div style={{ ...mono, color: C.coralSoft, fontSize: 11, marginTop: 4 }}>{b.reference}</div>
                     )}
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] shrink-0" style={{ ...body, fontWeight: 600, backgroundColor: b.status === "accepted" || b.status === "completed" ? "rgba(46,158,134,0.18)" : b.status === "declined" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)", color: b.status === "accepted" || b.status === "completed" ? C.lagoon : b.status === "declined" ? C.hibiscus : C.coralSoft }}>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] shrink-0" style={{ ...body, fontWeight: 600, backgroundColor: b.status === "accepted" || b.status === "completed" ? "rgba(46,158,134,0.18)" : b.status === "declined" || b.status === "cancelled" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)", color: b.status === "accepted" || b.status === "completed" ? C.lagoon : b.status === "declined" || b.status === "cancelled" ? C.hibiscus : C.coralSoft }}>
                     {bookingStatusLabel(t, b.status)}
                   </span>
                 </div>
