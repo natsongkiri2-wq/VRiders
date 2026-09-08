@@ -437,7 +437,7 @@ const STRINGS = {
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
-      statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined",
+      statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed",
       openDisputes: "Reported issues", noDisputes: "No disputes — nothing to see here.",
       disputesHeading: "Disputes", disputesOpenCount: "{n} open",
       calendarHeading: "Availability calendar", selectVehicle: "Vehicle",
@@ -685,7 +685,7 @@ const STRINGS = {
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
-      statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée",
+      statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée",
       openDisputes: "Problèmes signalés", noDisputes: "Aucun litige — rien à signaler ici.",
       disputesHeading: "Litiges", disputesOpenCount: "{n} en cours",
       calendarHeading: "Calendrier de disponibilité", selectVehicle: "Véhicule",
@@ -1165,6 +1165,18 @@ function fmtDateShort(iso) {
 function fmtTimestampShort(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "Pacific/Efate" });
+}
+
+// Single source of truth for how a booking's status reads in both the
+// supplier dashboard and the customer's My Bookings list. Used to live as
+// two separate copies of this same ternary chain, neither of which had a
+// "completed" case — a finished rental fell through to the pending label
+// in both places. Fix it once, here, so it can't happen again.
+function bookingStatusLabel(t, s) {
+  if (s === "accepted") return t("supplier.statusAccepted");
+  if (s === "declined") return t("supplier.statusDeclined");
+  if (s === "completed") return t("supplier.statusCompleted");
+  return t("supplier.statusPending");
 }
 
 function DepositGauge({ amount, size = 34 }) {
@@ -4361,7 +4373,6 @@ function SupplierDashboard({ onOpenAuth }) {
         return finishedAt && new Date(finishedAt) >= monthStart;
       }).length
     : 11;
-  const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
 
   if (status !== "verified") {
     return <SupplierGate onOpenAuth={onOpenAuth} />;
@@ -4442,7 +4453,7 @@ function SupplierDashboard({ onOpenAuth }) {
                     </div>
                   ) : r.status !== "completed" ? (
                     <span className="px-2.5 py-1 rounded-full text-[10px]" style={{ ...body, fontWeight: 600, backgroundColor: r.status === "accepted" ? "rgba(46,158,134,0.18)" : "rgba(217,82,122,0.18)", color: r.status === "accepted" ? C.lagoon : C.hibiscus }}>
-                      {statusLabel(r.status)}
+                      {bookingStatusLabel(t, r.status)}
                     </span>
                   ) : null}
                 </div>
@@ -4771,8 +4782,6 @@ function MyBookings({ onResume }) {
   // list refreshes on its own, no manual refresh needed.
   useRealtimeRefresh("bookings", user ? `customer_id=eq.${user.id}` : null, load);
 
-  const statusLabel = (s) => (s === "accepted" ? t("supplier.statusAccepted") : s === "declined" ? t("supplier.statusDeclined") : t("supplier.statusPending"));
-
   if (!user) {
     return (
       <div className="max-w-md mx-auto px-5 py-24 text-center">
@@ -4815,8 +4824,8 @@ function MyBookings({ onResume }) {
                       <div style={{ ...mono, color: C.coralSoft, fontSize: 11, marginTop: 4 }}>{b.reference}</div>
                     )}
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] shrink-0" style={{ ...body, fontWeight: 600, backgroundColor: b.status === "accepted" ? "rgba(46,158,134,0.18)" : b.status === "declined" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)", color: b.status === "accepted" ? C.lagoon : b.status === "declined" ? C.hibiscus : C.coralSoft }}>
-                    {statusLabel(b.status)}
+                  <span className="px-2.5 py-1 rounded-full text-[10px] shrink-0" style={{ ...body, fontWeight: 600, backgroundColor: b.status === "accepted" || b.status === "completed" ? "rgba(46,158,134,0.18)" : b.status === "declined" ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)", color: b.status === "accepted" || b.status === "completed" ? C.lagoon : b.status === "declined" ? C.hibiscus : C.coralSoft }}>
+                    {bookingStatusLabel(t, b.status)}
                   </span>
                 </div>
                 {digits && (
