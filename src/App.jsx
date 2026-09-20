@@ -373,7 +373,7 @@ const STRINGS = {
       noResults: "No vehicles match those filters yet.",
     },
     types: { car: "Car", "4x4": "SUV 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "E-Bike", pickup: "Pickup 4x4" },
-    card: { perDay: "VUV/day", deposit: "VUV deposit", noDeposit: "No deposit", airport: "Airport pickup" },
+    card: { perDay: "VUV/day", deposit: "VUV deposit", noDeposit: "No deposit", airport: "Airport pickup", fromPrice: "from {price}/day for longer stays" },
     detail: {
       seats: "Seats", transmission: "Transmission", fuel: "Fuel", airportPickup: "Airport pickup",
       available: "Available", notOffered: "Not offered",
@@ -382,6 +382,7 @@ const STRINGS = {
       noDepositExplain: "This supplier doesn't require a deposit. There is still no insurance on this rental — you're responsible for any damage during your hire.",
       photoNote: "At pickup and return, take timestamped photos of the vehicle in-app. It's your record if there's ever a dispute about the deposit.",
       paidDirect: "Paid directly to the supplier",
+      tierBaseLabel: "1+ days", tierRangeLabel: "{days}+ days",
       quickId: "Quick ID check on first booking",
       requestToBook: "Request to book",
       reviews: "reviews",
@@ -404,6 +405,7 @@ const STRINGS = {
     booking: {
       steps: ["Request", "Confirm", "Pickup", "Return", "Deposit back"],
       pickupDate: "Pickup date", returnDate: "Return date", continueBtn: "Continue",
+      tripLength: "{n} day(s) total", discountApplied: "multi-day rate: {price} VUV/day",
       alreadyBooked: "Already booked:", conflictError: "Those dates overlap with an existing booking — try different dates.",
       noInsurance: "This rental has no insurance — Vanuatu rentals run on a {depositText} basis instead. You'll take handover photos in-app, and pay {supplier} directly by cash, bank transfer, or card.",
       depositBasis: "{amount} VUV refundable deposit", noDepositBasis: "no-deposit",
@@ -543,6 +545,9 @@ const STRINGS = {
       photoNote: "This supplier hasn't added photos yet — shown here with a colour-coded icon instead.",
       photoLabel: "Vehicle photo", addPhotoCta: "Add a photo",
       photoOptionalNote: "Optional, but listings with a photo get more bookings. You can add more photos any time after listing.",
+      multiDayRates: "Multi-day rates", multiDayRatesNote: "Optional — offer a lower per-day price for longer bookings. Add as many thresholds as you like.",
+      tierDaysLabel: "Min. days", tierPriceLabel: "Price per day (VUV)", removeTier: "Remove", addTier: "Add a rate",
+      tierSummaryLine: "{days}+ days: {price} VUV/day",
       reviewListing: "Review listing", publish: "Publish listing",
       previewNote: "This is how customers will see it. New listings are marked pending until you've completed verification.",
     },
@@ -656,7 +661,7 @@ const STRINGS = {
       noResults: "Aucun véhicule ne correspond à ces filtres pour l'instant.",
     },
     types: { car: "Voiture", "4x4": "VUS 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "Vélo électrique", pickup: "Pick-up 4x4" },
-    card: { perDay: "VUV/jour", deposit: "VUV de caution", noDeposit: "Sans caution", airport: "Prise en charge à l'aéroport" },
+    card: { perDay: "VUV/jour", deposit: "VUV de caution", noDeposit: "Sans caution", airport: "Prise en charge à l'aéroport", fromPrice: "dès {price}/jour pour les séjours plus longs" },
     detail: {
       seats: "Places", transmission: "Transmission", fuel: "Carburant", airportPickup: "Prise en charge aéroport",
       available: "Disponible", notOffered: "Non proposé",
@@ -665,6 +670,7 @@ const STRINGS = {
       noDepositExplain: "Ce loueur ne demande pas de caution. Cette location reste sans assurance — vous êtes responsable de tout dommage pendant la location.",
       photoNote: "Au départ et au retour, prenez des photos horodatées du véhicule dans l'application. C'est votre preuve en cas de litige sur la caution.",
       paidDirect: "Payé directement au loueur",
+      tierBaseLabel: "1+ jours", tierRangeLabel: "{days}+ jours",
       quickId: "Vérification d'identité rapide à la première réservation",
       requestToBook: "Demander la réservation",
       reviews: "avis",
@@ -687,6 +693,7 @@ const STRINGS = {
     booking: {
       steps: ["Demande", "Confirmation", "Départ", "Retour", "Caution rendue"],
       pickupDate: "Date de prise en charge", returnDate: "Date de retour", continueBtn: "Continuer",
+      tripLength: "{n} jour(s) au total", discountApplied: "tarif longue durée : {price} VUV/jour",
       alreadyBooked: "Déjà réservé :", conflictError: "Ces dates chevauchent une réservation existante — essayez d'autres dates.",
       noInsurance: "Cette location n'inclut pas d'assurance — au Vanuatu, les locations fonctionnent avec {depositText} à la place. Vous prendrez des photos de remise en main propre dans l'application, et paierez {supplier} directement en espèces, par virement ou par carte.",
       depositBasis: "une caution remboursable de {amount} VUV", noDepositBasis: "aucune caution",
@@ -826,6 +833,9 @@ const STRINGS = {
       photoNote: "Ce loueur n'a pas encore ajouté de photos — affiché ici avec une icône colorée à la place.",
       photoLabel: "Photo du véhicule", addPhotoCta: "Ajouter une photo",
       photoOptionalNote: "Facultatif, mais les annonces avec photo reçoivent plus de réservations. Vous pouvez ajouter d'autres photos à tout moment après la publication.",
+      multiDayRates: "Tarifs longue durée", multiDayRatesNote: "Facultatif — proposez un prix par jour réduit pour les réservations plus longues. Ajoutez autant de paliers que vous le souhaitez.",
+      tierDaysLabel: "Jours min.", tierPriceLabel: "Prix par jour (VUV)", removeTier: "Supprimer", addTier: "Ajouter un tarif",
+      tierSummaryLine: "{days}+ jours : {price} VUV/jour",
       reviewListing: "Vérifier l'annonce", publish: "Publier l'annonce",
       previewNote: "Voici comment les clients la verront. Les nouvelles annonces sont marquées en attente jusqu'à la vérification.",
     },
@@ -1487,6 +1497,22 @@ function formatThousands(s) {
   return d ? Number(d).toLocaleString("en-US") : "";
 }
 
+// Client-side mirror of the DB's rental_effective_price_per_day() — same
+// rule (highest-qualifying min_days tier wins, else the flat rate) so the
+// price a customer previews here matches what actually gets invoiced.
+function effectivePricePerDay(basePrice, tiers, nights) {
+  if (!tiers || tiers.length === 0) return basePrice;
+  const qualifying = tiers.filter((tr) => tr.min_days <= nights);
+  if (qualifying.length === 0) return basePrice;
+  return qualifying.reduce((best, tr) => (tr.min_days > best.min_days ? tr : best)).price_per_day;
+}
+
+function daysBetween(from, to) {
+  if (!from || !to) return 0;
+  const ms = new Date(to + "T00:00:00") - new Date(from + "T00:00:00");
+  return Math.max(1, Math.round(ms / 86400000));
+}
+
 function fmtDateShort(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
@@ -1857,6 +1883,11 @@ function VehicleCard({ v, onSelect, compareIds, onToggleCompare }) {
           <div>
             <span style={{ ...mono, fontSize: 17, fontWeight: 500, color: C.ink }}>{fmtVUV(v.price)}</span>
             <span style={{ ...body, fontSize: 11.5, color: C.inkSoft }}> {t("card.perDay")}</span>
+            {v.priceTiers && v.priceTiers.length > 0 && (
+              <div style={{ ...body, fontSize: 10, color: C.lagoonDeep, fontWeight: 500, marginTop: 1 }}>
+                {t("card.fromPrice", { price: fmtVUV(Math.min(...v.priceTiers.map((tr) => tr.price_per_day))) })}
+              </div>
+            )}
           </div>
           <div style={{ ...body, fontSize: 11, color: v.deposit ? C.coral : C.lagoonDeep, fontWeight: 500 }}>
             {v.deposit ? `${fmtVUV(v.deposit)} ${t("card.deposit")}` : t("card.noDeposit")}
@@ -2047,6 +2078,26 @@ function VehicleDetail({ v, onClose, onBook, idVerified }) {
               <p style={{ ...body, fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
                 {t("detail.photoNote")}
               </p>
+            </div>
+          )}
+
+          {v.priceTiers && v.priceTiers.length > 0 && (
+            <div className="rounded-xl p-4 mt-3" style={{ backgroundColor: "#fff", border: `1px solid ${C.lineDark}` }}>
+              <div style={{ ...body, fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 8 }}>
+                {t("addVehicle.multiDayRates")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span style={{ ...body, fontSize: 12, color: C.inkSoft }}>{t("detail.tierBaseLabel")}</span>
+                  <span style={{ ...mono, fontSize: 12.5, color: C.ink }}>{fmtVUV(v.price)} {t("card.perDay")}</span>
+                </div>
+                {[...v.priceTiers].sort((a, b) => a.min_days - b.min_days).map((tr, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <span style={{ ...body, fontSize: 12, color: C.inkSoft }}>{t("detail.tierRangeLabel", { days: tr.min_days })}</span>
+                    <span style={{ ...mono, fontSize: 12.5, color: C.lagoonDeep }}>{fmtVUV(tr.price_per_day)} {t("card.perDay")}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -2788,6 +2839,21 @@ function BookingModal({ v, resumeBooking, onClose }) {
               className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
               style={{ ...body, backgroundColor: C.void, color: C.sand, border: `1px solid ${C.line}` }} />
 
+            {dates.from && dates.to && !hasConflict && (() => {
+              const nights = daysBetween(dates.from, dates.to);
+              const rate = effectivePricePerDay(v.price, v.priceTiers, nights);
+              const discounted = rate < v.price;
+              return (
+                <div className="rounded-lg px-3 py-2.5 mt-3 flex items-center justify-between" style={{ backgroundColor: C.panelSoft }}>
+                  <span style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.8 }}>
+                    {t("booking.tripLength", { n: nights })}
+                    {discounted && <span style={{ color: C.lagoon }}> · {t("booking.discountApplied", { price: fmtVUV(rate) })}</span>}
+                  </span>
+                  <span style={{ ...mono, fontSize: 14, color: C.sand, fontWeight: 500 }}>{fmtVUV(rate * nights)} VUV</span>
+                </div>
+              );
+            })()}
+
             {unavailableRanges.length > 0 && (
               <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: C.panelSoft }}>
                 <div className="flex items-center gap-1.5 mb-1">
@@ -3303,7 +3369,7 @@ function AddVehicleModal({ onClose, onAdd }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: "", type: "car", seats: "", trans: "Auto", fuel: "Petrol", area: "Port Vila", airport: false,
-    price: "", depositOn: false, depositAmount: "", photoFile: null, photoPreview: null,
+    price: "", depositOn: false, depositAmount: "", photoFile: null, photoPreview: null, priceTiers: [],
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
 
@@ -3313,10 +3379,21 @@ function AddVehicleModal({ onClose, onAdd }) {
     setForm((f) => ({ ...f, photoFile: file, photoPreview: dataUrl }));
   };
 
+  // Suppliers can offer a lower per-day rate for longer stays — any number
+  // of "N+ days -> price/day" tiers. Rows with a blank day count or price
+  // are just dropped at submit time rather than blocking the form.
+  const addTier = () => setForm((f) => ({ ...f, priceTiers: [...f.priceTiers, { days: "", price: "" }] }));
+  const updateTier = (i, key, val) => setForm((f) => ({ ...f, priceTiers: f.priceTiers.map((tr, idx) => (idx === i ? { ...tr, [key]: val } : tr)) }));
+  const removeTier = (i) => setForm((f) => ({ ...f, priceTiers: f.priceTiers.filter((_, idx) => idx !== i) }));
+
   const step0Valid = form.name.trim() && form.seats;
   const step1Valid = form.price && (!form.depositOn || form.depositAmount);
 
   const submit = () => {
+    const cleanTiers = form.priceTiers
+      .filter((tr) => tr.days && tr.price)
+      .map((tr) => ({ min_days: Number(tr.days), price_per_day: Number(tr.price) }))
+      .sort((a, b) => a.min_days - b.min_days);
     onAdd({
       id: Date.now(),
       name: form.name.trim(),
@@ -3326,6 +3403,7 @@ function AddVehicleModal({ onClose, onAdd }) {
       rating: 0,
       reviews: 0,
       price: Number(form.price),
+      priceTiers: cleanTiers,
       deposit: form.depositOn ? Number(form.depositAmount) : 0,
       seats: Number(form.seats),
       trans: form.trans,
@@ -3443,6 +3521,35 @@ function AddVehicleModal({ onClose, onAdd }) {
               </div>
             )}
             <div>
+              <FieldLabel>{t("addVehicle.multiDayRates")}</FieldLabel>
+              <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginBottom: 8, lineHeight: 1.5 }}>
+                {t("addVehicle.multiDayRatesNote")}
+              </p>
+              {form.priceTiers.length > 0 && (
+                <div className="flex gap-2 mb-1.5 px-0.5">
+                  <span className="flex-1" style={{ ...body, fontSize: 10, color: C.mist, opacity: 0.55 }}>{t("addVehicle.tierDaysLabel")}</span>
+                  <span className="flex-1" style={{ ...body, fontSize: 10, color: C.mist, opacity: 0.55 }}>{t("addVehicle.tierPriceLabel")}</span>
+                  <span className="w-9 shrink-0" />
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                {form.priceTiers.map((tier, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input type="text" inputMode="numeric" value={tier.days} onChange={(e) => updateTier(i, "days", digitsOnly(e.target.value))}
+                      placeholder="3" className="flex-1 px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                    <input type="text" inputMode="numeric" value={formatThousands(tier.price)} onChange={(e) => updateTier(i, "price", digitsOnly(e.target.value))}
+                      placeholder="e.g. 9,000" className="flex-1 px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                    <button onClick={() => removeTier(i)} className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ border: `1px solid ${C.line}` }} title={t("addVehicle.removeTier")}>
+                      <X size={14} color={C.mist} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addTier} className="flex items-center gap-1 text-xs mt-2.5" style={{ ...body, fontWeight: 600, color: C.coralSoft }}>
+                <Plus size={13} /> {t("addVehicle.addTier")}
+              </button>
+            </div>
+            <div>
               <FieldLabel>{t("addVehicle.photoLabel")}</FieldLabel>
               <label
                 className="rounded-xl overflow-hidden cursor-pointer flex flex-col items-center justify-center relative"
@@ -3498,6 +3605,15 @@ function AddVehicleModal({ onClose, onAdd }) {
                     {form.depositOn ? `${fmtVUV(Number(form.depositAmount) || 0)} ${t("card.deposit")}` : t("card.noDeposit")}
                   </span>
                 </div>
+                {form.priceTiers.filter((tr) => tr.days && tr.price).length > 0 && (
+                  <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px solid ${C.lineDark}` }}>
+                    <div style={{ ...body, fontSize: 10, color: C.inkSoft, opacity: 0.8, marginBottom: 3 }}>{t("addVehicle.multiDayRates")}</div>
+                    <div style={{ ...body, fontSize: 11, color: C.inkSoft }}>
+                      {form.priceTiers.filter((tr) => tr.days && tr.price).sort((a, b) => Number(a.days) - Number(b.days))
+                        .map((tr) => t("addVehicle.tierSummaryLine", { days: tr.days, price: fmtVUV(Number(tr.price)) })).join(" · ")}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7, marginBottom: 14, lineHeight: 1.5 }}>
@@ -3536,12 +3652,21 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
     price: vehicle.price != null ? String(vehicle.price) : "",
     depositOn: !!vehicle.deposit,
     depositAmount: vehicle.deposit ? String(vehicle.deposit) : "",
+    priceTiers: (vehicle.priceTiers || []).map((tr) => ({ days: String(tr.min_days), price: String(tr.price_per_day) })),
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
   const valid = form.name.trim() && form.seats && form.price && (!form.depositOn || form.depositAmount);
 
+  const addTier = () => setForm((f) => ({ ...f, priceTiers: [...f.priceTiers, { days: "", price: "" }] }));
+  const updateTier = (i, key, val) => setForm((f) => ({ ...f, priceTiers: f.priceTiers.map((tr, idx) => (idx === i ? { ...tr, [key]: val } : tr)) }));
+  const removeTier = (i) => setForm((f) => ({ ...f, priceTiers: f.priceTiers.filter((_, idx) => idx !== i) }));
+
   const save = () => {
     if (!valid || saving) return;
+    const cleanTiers = form.priceTiers
+      .filter((tr) => tr.days && tr.price)
+      .map((tr) => ({ min_days: Number(tr.days), price_per_day: Number(tr.price) }))
+      .sort((a, b) => a.min_days - b.min_days);
     onSave({
       name: form.name.trim(),
       type: form.type,
@@ -3551,6 +3676,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
       area: form.area,
       airport: form.airport,
       price: Number(form.price),
+      priceTiers: cleanTiers,
       deposit: form.depositOn ? Number(form.depositAmount) : 0,
     });
   };
@@ -3643,6 +3769,35 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
           )}
+          <div>
+            <FieldLabel>{t("addVehicle.multiDayRates")}</FieldLabel>
+            <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginBottom: 8, lineHeight: 1.5 }}>
+              {t("addVehicle.multiDayRatesNote")}
+            </p>
+            {form.priceTiers.length > 0 && (
+              <div className="flex gap-2 mb-1.5 px-0.5">
+                <span className="flex-1" style={{ ...body, fontSize: 10, color: C.mist, opacity: 0.55 }}>{t("addVehicle.tierDaysLabel")}</span>
+                <span className="flex-1" style={{ ...body, fontSize: 10, color: C.mist, opacity: 0.55 }}>{t("addVehicle.tierPriceLabel")}</span>
+                <span className="w-9 shrink-0" />
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              {form.priceTiers.map((tier, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input type="text" inputMode="numeric" value={tier.days} onChange={(e) => updateTier(i, "days", digitsOnly(e.target.value))}
+                    placeholder="3" className="flex-1 px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                  <input type="text" inputMode="numeric" value={formatThousands(tier.price)} onChange={(e) => updateTier(i, "price", digitsOnly(e.target.value))}
+                    placeholder="e.g. 9,000" className="flex-1 px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                  <button onClick={() => removeTier(i)} className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ border: `1px solid ${C.line}` }} title={t("addVehicle.removeTier")}>
+                    <X size={14} color={C.mist} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addTier} className="flex items-center gap-1 text-xs mt-2.5" style={{ ...body, fontWeight: 600, color: C.coralSoft }}>
+              <Plus size={13} /> {t("addVehicle.addTier")}
+            </button>
+          </div>
           {error && (
             <p style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{error}</p>
           )}
@@ -4985,7 +5140,7 @@ function SupplierDashboard({ onOpenAuth }) {
           id: r.id, name: r.name, type: r.type,
           supplier: profile.business_name,
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
-          price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
+          price: r.price_per_day, priceTiers: r.price_tiers || [], deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
           photoUrls: r.photo_urls || [],
@@ -5241,6 +5396,7 @@ function SupplierDashboard({ onOpenAuth }) {
           name: vehicle.name,
           type: vehicle.type,
           price_per_day: vehicle.price,
+          price_tiers: vehicle.priceTiers || [],
           deposit_amount: vehicle.deposit,
           seats: vehicle.seats,
           transmission: vehicle.trans,
@@ -5265,7 +5421,7 @@ function SupplierDashboard({ onOpenAuth }) {
         const mapped = {
           id: r.id, name: r.name, type: r.type, supplier: profile.business_name,
           verified: r.verified, rating: 0, reviews: 0,
-          price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
+          price: r.price_per_day, priceTiers: r.price_tiers || [], deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl, photoUrls: photoUrl ? [photoUrl] : [],
           isActive: r.is_active !== false,
@@ -5301,6 +5457,7 @@ function SupplierDashboard({ onOpenAuth }) {
           area: patch.area,
           airport_pickup: patch.airport,
           price_per_day: patch.price,
+          price_tiers: patch.priceTiers || [],
           deposit_amount: patch.deposit,
         }, accessToken);
       } catch (e) {
@@ -5312,7 +5469,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? {
       ...v,
       name: patch.name, type: patch.type, seats: patch.seats, trans: patch.trans,
-      fuel: patch.fuel, area: patch.area, airport: patch.airport, price: patch.price, deposit: patch.deposit,
+      fuel: patch.fuel, area: patch.area, airport: patch.airport, price: patch.price, priceTiers: patch.priceTiers || [], deposit: patch.deposit,
     } : v)));
     setSavingEdit(false);
     setEditingVehicleId(null);
@@ -5985,7 +6142,7 @@ function AppInner() {
     if (!SUPABASE_CONFIGURED) return;
     setVehiclesLoading(true);
     sbSelect("rental_vehicles", {
-      select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
+      select: "id,name,type,price_per_day,price_tiers,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
       // Suspended listings (admin moderation — see AdminListings) stay out
       // of the public marketplace entirely, not just visually hidden.
       query: "&is_active=eq.true",
@@ -5997,7 +6154,7 @@ function AppInner() {
           supplier: (r.suppliers && r.suppliers.business_name) || "—",
           phone: (r.suppliers && r.suppliers.phone) || "",
           verified: r.verified, rating: r.rating || 0, reviews: r.review_count || 0,
-          price: r.price_per_day, deposit: r.deposit_amount, seats: r.seats,
+          price: r.price_per_day, priceTiers: r.price_tiers || [], deposit: r.deposit_amount, seats: r.seats,
           trans: r.transmission, fuel: r.fuel, airport: r.airport_pickup, area: r.area,
           photoUrl: (r.photo_urls && r.photo_urls[0]) || null,
           photoUrls: r.photo_urls || [],
