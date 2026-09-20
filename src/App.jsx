@@ -1770,9 +1770,9 @@ function Filters({ type, setType, deposit, setDeposit, sort, setSort, view, setV
             className="bg-transparent outline-none"
             style={{ ...mono, color: C.mist }}
           >
-            <option style={{ color: C.ink }} value="rating">{t("filters.sortRating")}</option>
-            <option style={{ color: C.ink }} value="priceLow">{t("filters.sortPriceLow")}</option>
-            <option style={{ color: C.ink }} value="priceHigh">{t("filters.sortPriceHigh")}</option>
+            <option style={{ color: C.ink, backgroundColor: "#fff" }} value="rating">{t("filters.sortRating")}</option>
+            <option style={{ color: C.ink, backgroundColor: "#fff" }} value="priceLow">{t("filters.sortPriceLow")}</option>
+            <option style={{ color: C.ink, backgroundColor: "#fff" }} value="priceHigh">{t("filters.sortPriceHigh")}</option>
           </select>
         </div>
       </div>
@@ -3194,7 +3194,7 @@ function IDVerificationModal({ onClose, onVerified }) {
                 <FieldLabel>{t("id.country")}</FieldLabel>
                 <select value={form.country} onChange={(e) => set("country", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
                   {LICENSE_COUNTRIES.map((c) => (
-                    <option key={c} style={{ color: C.ink }}>{c}</option>
+                    <option key={c} style={{ color: C.ink, backgroundColor: "#fff" }}>{c}</option>
                   ))}
                 </select>
               </div>
@@ -3372,17 +3372,17 @@ function AddVehicleModal({ onClose, onAdd }) {
               <div>
                 <FieldLabel>{t("addVehicle.transmission")}</FieldLabel>
                 <select value={form.trans} onChange={(e) => set("trans", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
-                  <option style={{ color: C.ink }}>Auto</option>
-                  <option style={{ color: C.ink }}>Manual</option>
-                  <option style={{ color: C.ink }}>—</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>Auto</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>Manual</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>—</option>
                 </select>
               </div>
               <div>
                 <FieldLabel>{t("addVehicle.fuel")}</FieldLabel>
                 <select value={form.fuel} onChange={(e) => set("fuel", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
-                  <option style={{ color: C.ink }}>Petrol</option>
-                  <option style={{ color: C.ink }}>Diesel</option>
-                  <option style={{ color: C.ink }}>Electric</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>Petrol</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>Diesel</option>
+                  <option style={{ color: C.ink, backgroundColor: "#fff" }}>Electric</option>
                 </select>
               </div>
             </div>
@@ -3565,17 +3565,17 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
             <div>
               <FieldLabel>{t("addVehicle.transmission")}</FieldLabel>
               <select value={form.trans} onChange={(e) => set("trans", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
-                <option style={{ color: C.ink }}>Auto</option>
-                <option style={{ color: C.ink }}>Manual</option>
-                <option style={{ color: C.ink }}>—</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>Auto</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>Manual</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>—</option>
               </select>
             </div>
             <div>
               <FieldLabel>{t("addVehicle.fuel")}</FieldLabel>
               <select value={form.fuel} onChange={(e) => set("fuel", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
-                <option style={{ color: C.ink }}>Petrol</option>
-                <option style={{ color: C.ink }}>Diesel</option>
-                <option style={{ color: C.ink }}>Electric</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>Petrol</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>Diesel</option>
+                <option style={{ color: C.ink, backgroundColor: "#fff" }}>Electric</option>
               </select>
             </div>
           </div>
@@ -5712,7 +5712,7 @@ function SupplierDashboard({ onOpenAuth }) {
               style={{ ...body, backgroundColor: C.panel, color: C.sand, border: `1px solid ${C.line}` }}
             >
               {myVehicles.map((v) => (
-                <option key={v.id} value={v.id} style={{ color: C.ink }}>{v.name}</option>
+                <option key={v.id} value={v.id} style={{ color: C.ink, backgroundColor: "#fff" }}>{v.name}</option>
               ))}
             </select>
           </div>
