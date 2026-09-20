@@ -541,6 +541,8 @@ const STRINGS = {
       depositPolicy: "Deposit policy", noDeposit: "No deposit", depositRequired: "Deposit required",
       depositAmount: "Deposit amount (VUV, refundable)",
       photoNote: "This supplier hasn't added photos yet — shown here with a colour-coded icon instead.",
+      photoLabel: "Vehicle photo", addPhotoCta: "Add a photo",
+      photoOptionalNote: "Optional, but listings with a photo get more bookings. You can add more photos any time after listing.",
       reviewListing: "Review listing", publish: "Publish listing",
       previewNote: "This is how customers will see it. New listings are marked pending until you've completed verification.",
     },
@@ -822,6 +824,8 @@ const STRINGS = {
       depositPolicy: "Politique de caution", noDeposit: "Sans caution", depositRequired: "Caution requise",
       depositAmount: "Montant de la caution (VUV, remboursable)",
       photoNote: "Ce loueur n'a pas encore ajouté de photos — affiché ici avec une icône colorée à la place.",
+      photoLabel: "Photo du véhicule", addPhotoCta: "Ajouter une photo",
+      photoOptionalNote: "Facultatif, mais les annonces avec photo reçoivent plus de réservations. Vous pouvez ajouter d'autres photos à tout moment après la publication.",
       reviewListing: "Vérifier l'annonce", publish: "Publier l'annonce",
       previewNote: "Voici comment les clients la verront. Les nouvelles annonces sont marquées en attente jusqu'à la vérification.",
     },
@@ -1470,6 +1474,17 @@ function SupplierAuthProvider({ children }) {
 
 function fmtVUV(n) {
   return n === 0 ? "0" : n.toLocaleString("en-US");
+}
+
+// Strips everything but digits — the raw value kept in form state for
+// money fields — and formats digits with thousands separators for display,
+// so a supplier sees "8,500" while typing instead of a bare "8500".
+function digitsOnly(s) {
+  return (s || "").replace(/[^\d]/g, "");
+}
+function formatThousands(s) {
+  const d = digitsOnly(s);
+  return d ? Number(d).toLocaleString("en-US") : "";
 }
 
 function fmtDateShort(iso) {
@@ -3402,7 +3417,7 @@ function AddVehicleModal({ onClose, onAdd }) {
           <div className="flex flex-col gap-3.5">
             <div>
               <FieldLabel>{t("addVehicle.pricePerDay")} *</FieldLabel>
-              <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="e.g. 8500"
+              <input type="text" inputMode="numeric" value={formatThousands(form.price)} onChange={(e) => set("price", digitsOnly(e.target.value))} placeholder="e.g. 8,500"
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
             <div>
@@ -3423,17 +3438,35 @@ function AddVehicleModal({ onClose, onAdd }) {
             {form.depositOn && (
               <div>
                 <FieldLabel>{t("addVehicle.depositAmount")}</FieldLabel>
-                <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="e.g. 20000"
+                <input type="text" inputMode="numeric" value={formatThousands(form.depositAmount)} onChange={(e) => set("depositAmount", digitsOnly(e.target.value))} placeholder="e.g. 20,000"
                   className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
               </div>
             )}
-            <div className="rounded-xl p-3.5" style={{ backgroundColor: C.panelSoft }}>
-              <div className="flex items-start gap-2">
-                <Camera size={14} color={C.mist} className="mt-0.5 shrink-0" style={{ opacity: 0.7 }} />
-                <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.75, lineHeight: 1.5 }}>
-                  {t("addVehicle.photoNote")}
-                </p>
-              </div>
+            <div>
+              <FieldLabel>{t("addVehicle.photoLabel")}</FieldLabel>
+              <label
+                className="rounded-xl overflow-hidden cursor-pointer flex flex-col items-center justify-center relative"
+                style={{ backgroundColor: C.void, border: `1px solid ${form.photoPreview ? C.lagoon : C.line}`, height: 110 }}
+              >
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => handlePhoto(e.target.files && e.target.files[0])} />
+                {form.photoPreview ? (
+                  <>
+                    <img src={form.photoPreview} alt={form.name} className="w-full h-full object-cover" />
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}>
+                      <Check size={11} color="#fff" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Camera size={20} color={C.mist} style={{ opacity: 0.6 }} />
+                    <span style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7, marginTop: 6 }}>{t("addVehicle.addPhotoCta")}</span>
+                  </>
+                )}
+              </label>
+              <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
+                {t("addVehicle.photoOptionalNote")}
+              </p>
             </div>
             <div className="flex gap-2 mt-0.5">
               <button onClick={() => setStep(0)} className="w-11 h-10 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
@@ -3451,8 +3484,8 @@ function AddVehicleModal({ onClose, onAdd }) {
         {step === 2 && (
           <div>
             <div className="rounded-xl overflow-hidden mb-4" style={{ backgroundColor: C.sand }}>
-              <div className="h-24 flex items-center justify-center" style={{ backgroundColor: TYPE_META[form.type].color }}>
-                {React.createElement(TYPE_META[form.type].icon, { size: 34, color: "rgba(255,255,255,0.92)", strokeWidth: 1.5 })}
+              <div className="h-24 flex items-center justify-center bg-cover bg-center" style={{ backgroundColor: TYPE_META[form.type].color, backgroundImage: form.photoPreview ? `url(${form.photoPreview})` : undefined }}>
+                {!form.photoPreview && React.createElement(TYPE_META[form.type].icon, { size: 34, color: "rgba(255,255,255,0.92)", strokeWidth: 1.5 })}
               </div>
               <div className="p-3.5">
                 <div style={{ ...display, color: C.ink, fontWeight: 700, fontSize: 15 }}>{form.name}</div>
@@ -3585,7 +3618,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
           </label>
           <div>
             <FieldLabel>{t("addVehicle.pricePerDay")}</FieldLabel>
-            <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="e.g. 8500"
+            <input type="text" inputMode="numeric" value={formatThousands(form.price)} onChange={(e) => set("price", digitsOnly(e.target.value))} placeholder="e.g. 8,500"
               className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
           </div>
           <div>
@@ -3606,7 +3639,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
           {form.depositOn && (
             <div>
               <FieldLabel>{t("addVehicle.depositAmount")}</FieldLabel>
-              <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="e.g. 20000"
+              <input type="text" inputMode="numeric" value={formatThousands(form.depositAmount)} onChange={(e) => set("depositAmount", digitsOnly(e.target.value))} placeholder="e.g. 20,000"
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
           )}
