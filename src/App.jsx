@@ -5067,7 +5067,10 @@ function SupplierDashboard({ onOpenAuth }) {
     setPhotoUploadingId(vehicleId);
     try {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${profile.user_id}/${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      // Storage RLS on vehicle-photos checks the path's first folder
+      // against suppliers.id (profile.id), not the auth user id — using
+      // profile.user_id here silently failed every upload via RLS.
+      const path = `${profile.id}/${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
       const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
       const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
       const nextUrls = [...current, url];
@@ -5409,7 +5412,10 @@ function SupplierDashboard({ onOpenAuth }) {
         if (vehicle.photoFile) {
           try {
             const ext = (vehicle.photoFile.name.split(".").pop() || "jpg").toLowerCase();
-            const path = `${profile.user_id}/${r.id}.${ext}`;
+            // Same fix as addVehiclePhoto — path must start with the
+            // supplier id (profile.id), not the auth user id, to satisfy
+            // the vehicle-photos upload RLS policy.
+            const path = `${profile.id}/${r.id}.${ext}`;
             photoUrl = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, vehicle.photoFile, accessToken);
             await sbUpdate("rental_vehicles", `id=eq.${r.id}`, { photo_urls: [photoUrl] }, accessToken);
           } catch (e) {
