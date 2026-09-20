@@ -1,0 +1,301 @@
+From 05d963d4be1e7d4ca9f72f73b783e8970e9d8767 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 11 Sep 2026 06:11:53 +0000
+Subject: [PATCH] Fix: point app at new rental_vehicles/rental_bookings tables
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The homepage's "Couldn't load live vehicles: Could not find a
+relationship between 'vehicles' and 'suppliers' in the schema cache"
+error was a database-side issue, not a code bug: this Supabase project
+already had tables named vehicles/bookings, but they belonged to an
+unrelated car-wash-shaped schema (customer_id, vehicle_type, service_id,
+booking_date/time) with no supplier_id relationship at all. The rental
+marketplace's own vehicles/bookings tables were never actually created.
+
+Added rental_vehicles and rental_bookings tables (with the FKs,
+check/exclusion constraints, RLS policies, triggers, and the
+previously-missing get_supplier_document_url RPC that the rest of the
+schema — suppliers/invoices/disputes/reviews/profiles — already
+expected), leaving the car-wash tables untouched. This commit repoints
+every sbSelect/sbInsert/sbUpdate/useRealtimeRefresh call and embedded
+select (vehicles:rental_vehicles(...), bookings:rental_bookings(...))
+at the new tables.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011n1E87MBtMkMVYJAtN3LEu
+---
+ src/App.jsx | 62 ++++++++++++++++++++++++++---------------------------
+ 1 file changed, 31 insertions(+), 31 deletions(-)
+
+diff --git a/src/App.jsx b/src/App.jsx
+index 56b3ad1..b658d5a 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -2513,7 +2513,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+   useEffect(() => {
+     if (!SUPABASE_CONFIGURED || resumeBooking) return;
+     let cancelled = false;
+-    sbSelect("bookings", { select: "date_from,date_to", query: `&vehicle_id=eq.${v.id}&status=in.(pending,accepted)` })
++    sbSelect("rental_bookings", { select: "date_from,date_to", query: `&vehicle_id=eq.${v.id}&status=in.(pending,accepted)` })
+       .then((rows) => {
+         if (cancelled) return;
+         setVehicleBookings(rows.map((r) => ({ vehicleId: v.id, from: r.date_from, to: r.date_to })));
+@@ -2576,7 +2576,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+     if (!SUPABASE_CONFIGURED || !bookingId) return;
+     setCheckingStatus(true);
+     try {
+-      const rows = await sbSelect("bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at", query: `&id=eq.${bookingId}`, accessToken });
++      const rows = await sbSelect("rental_bookings", { select: "status,date_from,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at", query: `&id=eq.${bookingId}`, accessToken });
+       if (rows[0]) {
+         setBookingStatus(rows[0].status);
+         setPickupDateFrom(rows[0].date_from);
+@@ -2603,7 +2603,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+     setCancelling(true);
+     try {
+       const nowIso = new Date().toISOString();
+-      await sbUpdate("bookings", `id=eq.${bookingId}`, { status: "cancelled", cancelled_by: "customer", cancelled_at: nowIso }, accessToken);
++      await sbUpdate("rental_bookings", `id=eq.${bookingId}`, { status: "cancelled", cancelled_by: "customer", cancelled_at: nowIso }, accessToken);
+       setBookingStatus("cancelled");
+       setDepositInfo((d) => ({ ...d, cancelledBy: "customer", cancelledAt: nowIso }));
+       setShowCancelConfirm(false);
+@@ -2621,7 +2621,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+   // Live updates — the "Check for updates" button below still works as a
+   // manual fallback, but this makes the tracker update on its own the
+   // moment the supplier accepts/declines or marks the deposit refunded.
+-  useRealtimeRefresh("bookings", bookingId ? `id=eq.${bookingId}` : null, checkDepositStatus);
++  useRealtimeRefresh("rental_bookings", bookingId ? `id=eq.${bookingId}` : null, checkDepositStatus);
+   const unavailableRanges = useMemo(() => getUnavailableRanges(vehicleBookings, v.id), [vehicleBookings, v.id]);
+   const hasConflict = dates.from && dates.to && !isRangeAvailable(vehicleBookings, v.id, dates.from, dates.to);
+ 
+@@ -2659,7 +2659,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+       if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length) {
+         patch.return_completed_at = new Date().toISOString();
+       }
+-      await sbUpdate("bookings", `id=eq.${bookingId}`, patch, accessToken);
++      await sbUpdate("rental_bookings", `id=eq.${bookingId}`, patch, accessToken);
+       if (patch.return_completed_at) {
+         setDepositInfo((d) => ({ ...d, returnCompletedAt: patch.return_completed_at }));
+       }
+@@ -2682,7 +2682,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
+     setSubmitting(true);
+     setSubmitError("");
+     try {
+-      const rows = await sbInsert("bookings", [{
++      const rows = await sbInsert("rental_bookings", [{
+         vehicle_id: v.id,
+         supplier_id: v.supplierId,
+         customer_id: user.id,
+@@ -3668,7 +3668,7 @@ function InvoicesSection() {
+     if (!SUPABASE_CONFIGURED || !profile) { setLoading(false); return; }
+     let cancelled = false;
+     sbSelect("invoices", {
+-      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,invoice_items(gross_amount,bookings(date_from,date_to,vehicles(name),profiles(full_name)))",
++      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,invoice_items(gross_amount,bookings:rental_bookings(date_from,date_to,vehicles:rental_vehicles(name),profiles(full_name)))",
+       query: `&supplier_id=eq.${profile.id}&order=period_start.desc`,
+       accessToken,
+     })
+@@ -3799,7 +3799,7 @@ function AvailabilityCalendar({ vehicleId }) {
+     setRanges([]);
+     setLoading(true);
+     Promise.all([
+-      sbSelect("bookings", { select: "id,date_from,date_to", query: `&vehicle_id=eq.${vehicleId}&status=in.(pending,accepted)`, accessToken }),
++      sbSelect("rental_bookings", { select: "id,date_from,date_to", query: `&vehicle_id=eq.${vehicleId}&status=in.(pending,accepted)`, accessToken }),
+       sbSelect("supplier_blocks", { select: "id,date_from,date_to", query: `&vehicle_id=eq.${vehicleId}`, accessToken }),
+     ])
+       .then(([bookingRows, blockRows]) => {
+@@ -4427,7 +4427,7 @@ function AdminDisputes() {
+     setLoading(true);
+     setLoadError("");
+     sbSelect("disputes", {
+-      select: "id,category,description,status,supplier_response,created_at,bookings(vehicles(name),suppliers(business_name)),profiles!disputes_raised_by_fkey(full_name)",
++      select: "id,category,description,status,supplier_response,created_at,bookings:rental_bookings(vehicles:rental_vehicles(name),suppliers(business_name)),profiles!disputes_raised_by_fkey(full_name)",
+       query: "&order=status.asc,created_at.desc",
+       accessToken,
+     })
+@@ -4520,7 +4520,7 @@ function AdminListings() {
+   const load = () => {
+     setLoading(true);
+     setLoadError("");
+-    sbSelect("vehicles", {
++    sbSelect("rental_vehicles", {
+       select: "id,name,type,price_per_day,is_active,verified,created_at,photo_urls,suppliers(business_name)",
+       query: "&order=created_at.desc",
+       accessToken,
+@@ -4536,14 +4536,14 @@ function AdminListings() {
+   };
+ 
+   useEffect(() => { load(); }, []);
+-  useRealtimeRefresh("vehicles", undefined, load);
++  useRealtimeRefresh("rental_vehicles", undefined, load);
+ 
+   const toggleActive = async (id, nextActive) => {
+     setBusyId(id);
+     const prev = listings;
+     setListings(listings.map((l) => (l.id === id ? { ...l, isActive: nextActive } : l)));
+     try {
+-      await sbUpdate("vehicles", `id=eq.${id}`, { is_active: nextActive }, accessToken);
++      await sbUpdate("rental_vehicles", `id=eq.${id}`, { is_active: nextActive }, accessToken);
+     } catch (e) {
+       setListings(prev);
+       setLoadError(e.message);
+@@ -4615,7 +4615,7 @@ function AdminInvoices() {
+     setLoading(true);
+     setLoadError("");
+     sbSelect("invoices", {
+-      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,suppliers(business_name),invoice_items(gross_amount,bookings(date_from,date_to,vehicles(name),profiles(full_name)))",
++      select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,suppliers(business_name),invoice_items(gross_amount,bookings:rental_bookings(date_from,date_to,vehicles:rental_vehicles(name),profiles(full_name)))",
+       query: "&order=due_date.desc",
+       accessToken,
+     })
+@@ -4733,7 +4733,7 @@ function SupplierDashboard({ onOpenAuth }) {
+       const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
+       const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
+       const nextUrls = [...current, url];
+-      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
++      await sbUpdate("rental_vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
+       setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrls: nextUrls, photoUrl: v.photoUrl || url } : v)));
+     } catch (e) {
+       console.error("Vehicle photo upload failed:", e.message);
+@@ -4751,7 +4751,7 @@ function SupplierDashboard({ onOpenAuth }) {
+     const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
+     const nextUrls = current.filter((u) => u !== url);
+     try {
+-      await sbUpdate("vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
++      await sbUpdate("rental_vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
+       setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrls: nextUrls, photoUrl: nextUrls[0] || null } : v)));
+     } catch (e) {
+       console.error("Removing vehicle photo failed:", e.message);
+@@ -4767,7 +4767,7 @@ function SupplierDashboard({ onOpenAuth }) {
+     setDisputesLoading(true);
+     setDisputesError("");
+     sbSelect("disputes", {
+-      select: "id,category,description,status,supplier_response,created_at,bookings!inner(vehicles(name)),profiles!disputes_raised_by_fkey(full_name)",
++      select: "id,category,description,status,supplier_response,created_at,bookings:rental_bookings!inner(vehicles:rental_vehicles(name)),profiles!disputes_raised_by_fkey(full_name)",
+       query: `&bookings.supplier_id=eq.${profile.id}&order=created_at.desc`,
+       accessToken,
+     })
+@@ -4795,7 +4795,7 @@ function SupplierDashboard({ onOpenAuth }) {
+     let cancelled = false;
+     setVehiclesLoading(true);
+     setVehiclesError("");
+-    sbSelect("vehicles", { query: `&supplier_id=eq.${profile.id}&order=created_at.desc`, accessToken })
++    sbSelect("rental_vehicles", { query: `&supplier_id=eq.${profile.id}&order=created_at.desc`, accessToken })
+       .then((rows) => {
+         if (cancelled) return;
+         const mapped = rows.map((r) => ({
+@@ -4821,8 +4821,8 @@ function SupplierDashboard({ onOpenAuth }) {
+     if (!usingRealData) return;
+     setBookingsError("");
+     Promise.all([
+-      sbSelect("bookings", {
+-        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles(name,deposit_amount),profiles(full_name,phone)",
++      sbSelect("rental_bookings", {
++        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles:rental_vehicles(name,deposit_amount),profiles(full_name,phone)",
+         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
+         accessToken,
+       }),
+@@ -4869,14 +4869,14 @@ function SupplierDashboard({ onOpenAuth }) {
+ 
+   // Live updates — the moment a customer sends a new request, or a
+   // pickup/return checklist gets saved, this list refreshes on its own.
+-  useRealtimeRefresh("bookings", usingRealData ? `supplier_id=eq.${profile.id}` : null, loadBookings);
++  useRealtimeRefresh("rental_bookings", usingRealData ? `supplier_id=eq.${profile.id}` : null, loadBookings);
+ 
+   // Real reviews left for this supplier.
+   useEffect(() => {
+     if (!usingRealData) return;
+     let cancelled = false;
+     sbSelect("reviews", {
+-      select: "id,rating,comment,created_at,profiles!reviews_author_id_fkey(full_name),bookings(vehicles(name))",
++      select: "id,rating,comment,created_at,profiles!reviews_author_id_fkey(full_name),bookings:rental_bookings(vehicles:rental_vehicles(name))",
+       query: `&target_supplier_id=eq.${profile.id}&target_type=eq.supplier&order=created_at.desc`,
+       accessToken,
+     })
+@@ -4926,7 +4926,7 @@ function SupplierDashboard({ onOpenAuth }) {
+       const prev = reqs;
+       setReqs(reqs.map((r) => (r.id === id ? { ...r, status: newStatus } : r)));
+       try {
+-        await sbUpdate("bookings", `id=eq.${id}`, { status: newStatus }, accessToken);
++        await sbUpdate("rental_bookings", `id=eq.${id}`, { status: newStatus }, accessToken);
+       } catch (e) {
+         setReqs(prev);
+         setBookingsError(e.message);
+@@ -4967,7 +4967,7 @@ function SupplierDashboard({ onOpenAuth }) {
+       : { status: "completed" };
+     setReqs(reqs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+     try {
+-      await sbUpdate("bookings", `id=eq.${id}`, patch, accessToken);
++      await sbUpdate("rental_bookings", `id=eq.${id}`, patch, accessToken);
+       closeRefundForm();
+     } catch (e) {
+       setReqs(prev);
+@@ -4990,7 +4990,7 @@ function SupplierDashboard({ onOpenAuth }) {
+     const patch = { status: "cancelled", cancelled_by: "supplier", cancelled_at: nowIso };
+     setReqs(reqs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+     try {
+-      await sbUpdate("bookings", `id=eq.${id}`, patch, accessToken);
++      await sbUpdate("rental_bookings", `id=eq.${id}`, patch, accessToken);
+       setCancelFormId(null);
+     } catch (e) {
+       setReqs(prev);
+@@ -5053,7 +5053,7 @@ function SupplierDashboard({ onOpenAuth }) {
+   const handleAdd = async (vehicle) => {
+     if (usingRealData) {
+       try {
+-        const rows = await sbInsert("vehicles", [{
++        const rows = await sbInsert("rental_vehicles", [{
+           supplier_id: profile.id,
+           name: vehicle.name,
+           type: vehicle.type,
+@@ -5072,7 +5072,7 @@ function SupplierDashboard({ onOpenAuth }) {
+             const ext = (vehicle.photoFile.name.split(".").pop() || "jpg").toLowerCase();
+             const path = `${profile.user_id}/${r.id}.${ext}`;
+             photoUrl = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, vehicle.photoFile, accessToken);
+-            await sbUpdate("vehicles", `id=eq.${r.id}`, { photo_urls: [photoUrl] }, accessToken);
++            await sbUpdate("rental_vehicles", `id=eq.${r.id}`, { photo_urls: [photoUrl] }, accessToken);
+           } catch (e) {
+             // Photo upload failing shouldn't block the listing itself —
+             // the vehicle is already saved, just without a photo.
+@@ -5582,8 +5582,8 @@ function MyBookings({ onResume }) {
+   const load = () => {
+     if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
+     setError("");
+-    sbSelect("bookings", {
+-      select: "id,status,date_from,date_to,reference,created_at,vehicles(id,name,type,deposit_amount),suppliers(business_name,phone)",
++    sbSelect("rental_bookings", {
++      select: "id,status,date_from,date_to,reference,created_at,vehicles:rental_vehicles(id,name,type,deposit_amount),suppliers(business_name,phone)",
+       query: `&customer_id=eq.${user.id}&order=created_at.desc`,
+       accessToken,
+     })
+@@ -5612,7 +5612,7 @@ function MyBookings({ onResume }) {
+ 
+   // Live updates — the moment a supplier accepts/declines a booking, this
+   // list refreshes on its own, no manual refresh needed.
+-  useRealtimeRefresh("bookings", user ? `customer_id=eq.${user.id}` : null, load);
++  useRealtimeRefresh("rental_bookings", user ? `customer_id=eq.${user.id}` : null, load);
+ 
+   if (!user) {
+     return (
+@@ -5747,7 +5747,7 @@ function AppInner() {
+   const loadVehicles = () => {
+     if (!SUPABASE_CONFIGURED) return;
+     setVehiclesLoading(true);
+-    sbSelect("vehicles", {
++    sbSelect("rental_vehicles", {
+       select: "id,name,type,price_per_day,deposit_amount,seats,transmission,fuel,airport_pickup,area,verified,rating,review_count,photo_urls,supplier_id,suppliers(business_name,phone)",
+       // Suspended listings (admin moderation — see AdminListings) stay out
+       // of the public marketplace entirely, not just visually hidden.
+@@ -5773,7 +5773,7 @@ function AppInner() {
+   // Keeps the marketplace list current without a manual refresh — a new
+   // listing, a price change, or a supplier being verified all show up on
+   // their own, matching how bookings/disputes/invoices already behave.
+-  useRealtimeRefresh("vehicles", SUPABASE_CONFIGURED ? undefined : null, loadVehicles);
++  useRealtimeRefresh("rental_vehicles", SUPABASE_CONFIGURED ? undefined : null, loadVehicles);
+ 
+   const sourceVehicles = dbVehicles;
+ 
+-- 
+2.43.0
+
