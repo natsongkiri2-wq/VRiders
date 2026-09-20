@@ -3338,7 +3338,7 @@ function AddVehicleModal({ onClose, onAdd }) {
         {step === 0 && (
           <div className="flex flex-col gap-3.5">
             <div>
-              <FieldLabel>{t("addVehicle.vehicleName")}</FieldLabel>
+              <FieldLabel>{t("addVehicle.vehicleName")} *</FieldLabel>
               <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={t("addVehicle.vehicleNamePh")}
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
@@ -3360,8 +3360,8 @@ function AddVehicleModal({ onClose, onAdd }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <FieldLabel>{t("addVehicle.seats")}</FieldLabel>
-                <input type="number" min="1" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="5"
+                <FieldLabel>{t("addVehicle.seats")} *</FieldLabel>
+                <input type="number" min="1" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="e.g. 5"
                   className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
               </div>
               <div>
@@ -3401,8 +3401,8 @@ function AddVehicleModal({ onClose, onAdd }) {
         {step === 1 && (
           <div className="flex flex-col gap-3.5">
             <div>
-              <FieldLabel>{t("addVehicle.pricePerDay")}</FieldLabel>
-              <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="8500"
+              <FieldLabel>{t("addVehicle.pricePerDay")} *</FieldLabel>
+              <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="e.g. 8500"
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
             <div>
@@ -3423,7 +3423,7 @@ function AddVehicleModal({ onClose, onAdd }) {
             {form.depositOn && (
               <div>
                 <FieldLabel>{t("addVehicle.depositAmount")}</FieldLabel>
-                <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="20000"
+                <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="e.g. 20000"
                   className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
               </div>
             )}
@@ -3554,7 +3554,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <FieldLabel>{t("addVehicle.seats")}</FieldLabel>
-              <input type="number" min="1" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="5"
+              <input type="number" min="1" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="e.g. 5"
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
             <div>
@@ -3585,7 +3585,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
           </label>
           <div>
             <FieldLabel>{t("addVehicle.pricePerDay")}</FieldLabel>
-            <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="8500"
+            <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="e.g. 8500"
               className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
           </div>
           <div>
@@ -3606,7 +3606,7 @@ function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
           {form.depositOn && (
             <div>
               <FieldLabel>{t("addVehicle.depositAmount")}</FieldLabel>
-              <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="20000"
+              <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="e.g. 20000"
                 className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
             </div>
           )}
