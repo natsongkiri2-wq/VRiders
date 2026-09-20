@@ -436,7 +436,7 @@ const STRINGS = {
       refundedMsg: "{supplier} marked this deposit as refunded on {date}.",
       partialRefundedMsg: "{supplier} refunded {amount} VUV of your {total} VUV deposit on {date}.",
       deductionReasonLabel: "Reason given:",
-      flag: "Flag this to Efate Rides", reported: "Reported — we'll follow up with {supplier} on your behalf.",
+      flag: "Flag this to Terima Rides", reported: "Reported — we'll follow up with {supplier} on your behalf.",
       checkStatus: "Check for updates",
     },
     review: {
@@ -488,7 +488,7 @@ const STRINGS = {
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       depositOverdue: "{duration} overdue", overdueDepositsBanner: "{n} deposit(s) past the 48-hour refund window — your customers can already see this as overdue.",
-      listingSuspended: "Suspended", listingSuspendedNote: "Efate Rides has hidden this listing from customers. Contact support if you're not sure why.",
+      listingSuspended: "Suspended", listingSuspendedNote: "Terima Rides has hidden this listing from customers. Contact support if you're not sure why.",
       markRentalComplete: "Mark rental complete",
       fullRefund: "Full refund", partialRefund: "Partial / deduct", cancel: "Cancel",
       refundAmountLabel: "Refund amount (VUV)",
@@ -505,7 +505,7 @@ const STRINGS = {
       editVehicle: "Edit vehicle",
       managePhotos: "Manage photos", addPhoto: "Add photo", removePhoto: "Remove photo", donePhotos: "Done",
       photoLimitNote: "Up to {max} photos — customers see all of them on the listing.",
-      serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
+      serviceFeeLabel: "Service fee:", serviceFee: "Terima Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
       statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed", statusCancelled: "cancelled",
       cancelBooking: "Cancel booking", cancelBookingConfirm: "Cancel this booking? This can't be undone.", confirmCancelBooking: "Yes, cancel it",
       cancelledOn: "cancelled {date}", cancelledByYouNote: "You cancelled this booking.", cancelledByCustomerNote: "The customer cancelled this booking.",
@@ -529,8 +529,8 @@ const STRINGS = {
       viewDetails: "View details", hideDetails: "Hide details",
       lineItemsHeading: "Bookings this period",
       colVehicle: "Vehicle", colCustomer: "Customer", colDates: "Dates", colAmount: "Amount",
-      empty: "No invoices yet — they'll appear here once Efate Rides issues your first one, after your completed bookings.",
-      viewOnlyNote: "Invoices are issued by Efate Rides based on your completed bookings. Contact us if something looks off.",
+      empty: "No invoices yet — they'll appear here once Terima Rides issues your first one, after your completed bookings.",
+      viewOnlyNote: "Invoices are issued by Terima Rides based on your completed bookings. Contact us if something looks off.",
     },
     addVehicle: {
       title: "List a new vehicle",
@@ -556,7 +556,7 @@ const STRINGS = {
       saveChanges: "Save changes",
     },
     kyc: {
-      gateTitle: "List your vehicles on Efate Rides",
+      gateTitle: "List your vehicles on Terima Rides",
       gateBody: "Reach every customer searching Efate rentals. A quick one-time verification, then you're live.",
       gateBullet1: "More visibility, no marketing spend",
       gateBullet2: "You keep control of pricing and deposit terms",
@@ -724,7 +724,7 @@ const STRINGS = {
       refundedMsg: "{supplier} a indiqué avoir remboursé cette caution le {date}.",
       partialRefundedMsg: "{supplier} a remboursé {amount} VUV sur votre caution de {total} VUV le {date}.",
       deductionReasonLabel: "Motif indiqué :",
-      flag: "Signaler à Efate Rides", reported: "Signalé — nous allons faire le suivi avec {supplier} pour vous.",
+      flag: "Signaler à Terima Rides", reported: "Signalé — nous allons faire le suivi avec {supplier} pour vous.",
       checkStatus: "Vérifier les mises à jour",
     },
     review: {
@@ -776,7 +776,7 @@ const STRINGS = {
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       depositOverdue: "en retard de {duration}", overdueDepositsBanner: "{n} caution(s) au-delà du délai de 48 heures — vos clients le voient déjà comme en retard.",
-      listingSuspended: "Suspendue", listingSuspendedNote: "Efate Rides a masqué cette annonce aux clients. Contactez le support si vous n'êtes pas sûr(e) pourquoi.",
+      listingSuspended: "Suspendue", listingSuspendedNote: "Terima Rides a masqué cette annonce aux clients. Contactez le support si vous n'êtes pas sûr(e) pourquoi.",
       markRentalComplete: "Marquer la location comme terminée",
       fullRefund: "Remboursement total", partialRefund: "Partiel / déduction", cancel: "Annuler",
       refundAmountLabel: "Montant remboursé (VUV)",
@@ -793,7 +793,7 @@ const STRINGS = {
       editVehicle: "Modifier le véhicule",
       managePhotos: "Gérer les photos", addPhoto: "Ajouter une photo", removePhoto: "Supprimer la photo", donePhotos: "Terminé",
       photoLimitNote: "Jusqu'à {max} photos — les clients les voient toutes sur l'annonce.",
-      serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
+      serviceFeeLabel: "Frais de service :", serviceFee: "Terima Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
       statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée", statusCancelled: "annulée",
       cancelBooking: "Annuler la réservation", cancelBookingConfirm: "Annuler cette réservation ? Cette action est irréversible.", confirmCancelBooking: "Oui, annuler",
       cancelledOn: "annulée le {date}", cancelledByYouNote: "Vous avez annulé cette réservation.", cancelledByCustomerNote: "Le client a annulé cette réservation.",
@@ -817,8 +817,8 @@ const STRINGS = {
       viewDetails: "Voir le détail", hideDetails: "Masquer le détail",
       lineItemsHeading: "Réservations de cette période",
       colVehicle: "Véhicule", colCustomer: "Client", colDates: "Dates", colAmount: "Montant",
-      empty: "Aucune facture pour l'instant — elles apparaîtront ici dès qu'Efate Rides en émettra une, après vos réservations terminées.",
-      viewOnlyNote: "Les factures sont émises par Efate Rides d'après vos réservations terminées. Contactez-nous si quelque chose semble incorrect.",
+      empty: "Aucune facture pour l'instant — elles apparaîtront ici dès qu'Terima Rides en émettra une, après vos réservations terminées.",
+      viewOnlyNote: "Les factures sont émises par Terima Rides d'après vos réservations terminées. Contactez-nous si quelque chose semble incorrect.",
     },
     addVehicle: {
       title: "Ajouter un nouveau véhicule",
@@ -844,7 +844,7 @@ const STRINGS = {
       saveChanges: "Enregistrer les modifications",
     },
     kyc: {
-      gateTitle: "Publiez vos véhicules sur Efate Rides",
+      gateTitle: "Publiez vos véhicules sur Terima Rides",
       gateBody: "Touchez tous les clients qui cherchent une location sur Efate. Une vérification rapide, une seule fois, puis vous êtes en ligne.",
       gateBullet1: "Plus de visibilité, sans dépense marketing",
       gateBullet2: "Vous gardez le contrôle des prix et des conditions de caution",
@@ -1632,7 +1632,7 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
         <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: C.coral }}>
           <Compass size={17} color="#fff" />
         </div>
-        <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em" }}>Efate Rides</span>
+        <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em" }}>Terima Rides</span>
         {mode === "renter" && idVerified && (
           <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full ml-1" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
             <BadgeCheck size={11} color={C.lagoon} />
@@ -2631,7 +2631,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
       .catch((e) => console.error("Loading existing checklist failed:", e.message));
   }, [resumeBooking, accessToken]);
   const waDigits = (v.phone || "").replace(/[^0-9]/g, "");
-  const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Efate Rides.`);
+  const waMsg = encodeURIComponent(`Hi ${v.supplier}, I'd like to book the ${v.name} (ref ${ref}) via Terima Rides.`);
   const pickupDone = checklist.pickup && Object.keys(checklist.pickup).length === CHECK_ITEMS.length;
   const returnDone = checklist.return && Object.keys(checklist.return).length === CHECK_ITEMS.length;
   const [depositInfo, setDepositInfo] = useState({ returnCompletedAt: null, depositRefundedAt: null, refundAmount: null, deductionReason: null, cancelledBy: null, cancelledAt: null });
@@ -4747,8 +4747,8 @@ function AdminDashboard() {
 
 // Admin-wide dispute queue. Until now, a customer's overdue-deposit
 // dispute could only be seen and handled from inside the one supplier's
-// own dashboard, even though the app promises Efate Rides will follow up
-// on these — nobody at Efate Rides actually had a way to see them all.
+// own dashboard, even though the app promises Terima Rides will follow up
+// on these — nobody at Terima Rides actually had a way to see them all.
 // Reuses the same DisputeCard the supplier dashboard uses, unfiltered by
 // supplier, with the supplier's name shown on each card for context.
 function AdminDisputes() {
@@ -5569,7 +5569,7 @@ function SupplierDashboard({ onOpenAuth }) {
             )}
             {reqs.map((r) => {
               const custDigits = (r.customerPhone || "").replace(/[^0-9]/g, "");
-              const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Efate Rides.`);
+              const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Terima Rides.`);
               // Same 48h window the customer's own deposit tracker uses —
               // until now only the customer could see when a deposit was
               // running overdue; the supplier had no equivalent nudge on
