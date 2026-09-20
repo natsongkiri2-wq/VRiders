@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp, Compass,
-  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil
+  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil, Mail
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -1621,6 +1621,106 @@ function Stat({ label, value, icon: Icon }) {
   );
 }
 
+/* ---------------------------------- legal content (Terms / Privacy / Cancellation) ---------------------------------- */
+// Not part of the STRINGS i18n table on purpose — these are long-form
+// documents rather than short UI strings, so they're kept as their own
+// { en, fr } content object and picked by the current lang in LegalModal.
+// Plain-English baseline, not reviewed by a lawyer — worth a proper legal
+// review before this is relied on for anything contested.
+const SUPPORT_EMAIL = "natsongkiri2@gmail.com";
+const LEGAL_UPDATED = "20 September 2026";
+
+const LEGAL_CONTENT = {
+  en: {
+    terms: {
+      title: "Terms of Service",
+      sections: [
+        { h: "1. Who we are", b: "Terima Rides is an online marketplace based in Port Vila, Efate, Vanuatu that connects independent vehicle rental suppliers with customers looking to rent a car, scooter, or other vehicle on Efate Island. Terima Rides is not a vehicle rental company itself, does not own or operate any of the listed vehicles, and is not a party to the rental agreement between a customer and a supplier." },
+        { h: "2. Accounts and verification", b: "To book a vehicle, customers must create an account and verify a valid driver's license. To list a vehicle, suppliers must create an account and complete a one-time identity and vehicle-document verification. You're responsible for keeping your login details secure and for the accuracy of the information you provide." },
+        { h: "3. Bookings", b: "A booking request isn't confirmed until the supplier accepts it in the app. Vehicle availability, condition, and pickup/return arrangements are set by the supplier. Photos are taken at pickup and return inside the app to create a shared record of the vehicle's condition." },
+        { h: "4. Payment and deposits", b: "Terima Rides does not process rental payments or security deposits. Payment for the rental itself, and any deposit, is arranged and paid directly between the customer and the supplier, on whatever terms the supplier has stated. Terima Rides only invoices suppliers a service commission (currently 8%) on confirmed bookings, separately from what the customer pays the supplier." },
+        { h: "5. Cancellations and refunds", b: "See our separate Cancellation Policy. In short: cancellation terms, and any refund of amounts paid directly to a supplier, are between the customer and that supplier — Terima Rides does not hold or refund rental payments." },
+        { h: "6. Disputes", b: "If something goes wrong with a booking (for example, a disagreement over deposit deductions or vehicle condition), you can raise it in the app. Terima Rides will review the pickup/return photos and both parties' accounts and try to help reach a resolution, but we are not a court or arbitrator and cannot force either party to pay or refund anything." },
+        { h: "7. Supplier responsibilities", b: "Suppliers are responsible for making sure their vehicles are roadworthy, insured and legally permitted to be rented in Vanuatu, for the accuracy of their listings, and for complying with all applicable local laws." },
+        { h: "8. Customer responsibilities", b: "Customers are responsible for holding a valid driver's license (and International Driving Permit where required), for driving safely and legally, and for returning the vehicle in the condition agreed with the supplier." },
+        { h: "9. Prohibited conduct", b: "You may not use Terima Rides to list or book a vehicle fraudulently, to circumvent identity verification, or to harass or discriminate against another user." },
+        { h: "10. Liability", b: "Terima Rides provides the platform \"as is\" and is not liable for the condition of any vehicle, the conduct of any supplier or customer, or any loss arising from a booking. Nothing in these terms limits liability that cannot legally be limited." },
+        { h: "11. Changes to these terms", b: "We may update these terms from time to time; continued use of Terima Rides after a change means you accept the updated terms." },
+        { h: "12. Governing law", b: "These terms are governed by the laws of Vanuatu." },
+        { h: "13. Contact", b: `Questions about these terms can be sent to ${SUPPORT_EMAIL}.` },
+      ],
+    },
+    privacy: {
+      title: "Privacy Policy",
+      sections: [
+        { h: "1. What we collect", b: "Account details (name, email, phone); for customers, driver's license details and a photo of the license; for suppliers, identity-document and vehicle-document photos, plus business details; booking details (dates, vehicle, price); pickup/return condition photos; and any messages or dispute descriptions you submit in the app." },
+        { h: "2. Why we collect it", b: "To verify who you are before you can book or list a vehicle, to operate bookings and invoicing, to protect both parties in the event of a dispute over a vehicle's condition, and to communicate with you about your bookings and account." },
+        { h: "3. Who can see it", b: "Your own account details are visible to you. A supplier can see the booking and contact details of a customer who books their vehicle (and vice versa) so the rental can happen. Terima Rides admins can access identity documents and vehicle documents solely to verify suppliers and to review disputes. We do not sell your personal information to third parties or use it for advertising." },
+        { h: "4. Where it's stored", b: "Your data is stored with our database and file-storage provider (Supabase), with access controls in place so that identity documents and vehicle photos are only reachable by the account they belong to, the relevant counterparty for an active booking, or an admin." },
+        { h: "5. How long we keep it", b: "We keep account and booking data for as long as your account is active, and for a reasonable period after to meet legal, accounting and dispute-resolution needs." },
+        { h: "6. Your choices", b: `You can ask us to see what personal information we hold about you, correct it, or delete your account, by emailing ${SUPPORT_EMAIL}. Deleting your account may affect bookings still in progress.` },
+        { h: "7. Local storage", b: "The app uses your browser's local storage to keep you signed in between visits; this stays on your device and isn't something we can read remotely." },
+        { h: "8. Changes to this policy", b: "We may update this policy from time to time; the \"last updated\" date at the top will reflect the most recent change." },
+        { h: "9. Contact", b: `Questions about this policy can be sent to ${SUPPORT_EMAIL}.` },
+      ],
+    },
+    cancellation: {
+      title: "Cancellation & Refunds",
+      sections: [
+        { h: "1. Refunds go through the supplier", b: "Because Terima Rides does not process rental payments, we cannot issue refunds ourselves — refunds, if any, come from the supplier directly." },
+        { h: "2. Cancelling a booking", b: "You can cancel a pending or accepted booking from \"My Bookings\" in the app at any time before pickup. This updates the booking's status immediately for both you and the supplier." },
+        { h: "3. Refunds", b: "Whether any amount you've already paid a supplier is refunded, and how much, is between you and that supplier. If you've paid a deposit directly to a supplier and believe it's being withheld unfairly after a cancellation, you can raise a dispute in the app and we'll review it." },
+        { h: "4. Supplier cancellations", b: "A supplier can decline a pending request at no cost to either side. If a supplier cancels a booking you'd already arranged to pick up, contact them directly about any amount you've paid, and raise a dispute in the app if you can't resolve it together." },
+        { h: "5. No-shows", b: "If you don't collect the vehicle at the agreed time and haven't cancelled, the supplier's own no-show policy (as stated in their listing or agreed with you directly) applies." },
+      ],
+    },
+  },
+  fr: {
+    terms: {
+      title: "Conditions d'utilisation",
+      sections: [
+        { h: "1. Qui nous sommes", b: "Terima Rides est une place de marché en ligne basée à Port-Vila, Efate, Vanuatu, qui met en relation des loueurs de véhicules indépendants avec des clients souhaitant louer une voiture, un scooter ou un autre véhicule sur l'île d'Efate. Terima Rides n'est pas une société de location de véhicules, ne possède ni n'exploite aucun des véhicules publiés, et n'est pas partie au contrat de location entre un client et un loueur." },
+        { h: "2. Comptes et vérification", b: "Pour réserver un véhicule, les clients doivent créer un compte et vérifier un permis de conduire valide. Pour publier un véhicule, les loueurs doivent créer un compte et effectuer une vérification unique d'identité et des documents du véhicule. Vous êtes responsable de la sécurité de vos identifiants et de l'exactitude des informations fournies." },
+        { h: "3. Réservations", b: "Une demande de réservation n'est confirmée qu'une fois acceptée par le loueur dans l'application. La disponibilité, l'état du véhicule et les modalités de prise en charge/retour sont fixés par le loueur. Des photos sont prises lors de la prise en charge et du retour dans l'application afin de créer un état des lieux partagé." },
+        { h: "4. Paiement et cautions", b: "Terima Rides ne traite pas les paiements de location ni les cautions. Le paiement de la location elle-même, ainsi que toute caution, est convenu et versé directement entre le client et le loueur, selon les conditions fixées par ce dernier. Terima Rides facture uniquement aux loueurs une commission de service (actuellement 8 %) sur les réservations confirmées, distincte de ce que le client verse au loueur." },
+        { h: "5. Annulations et remboursements", b: "Voir notre politique d'annulation distincte. En résumé : les conditions d'annulation, ainsi que tout remboursement des sommes versées directement à un loueur, relèvent du client et de ce loueur — Terima Rides ne détient ni ne rembourse les paiements de location." },
+        { h: "6. Litiges", b: "En cas de problème avec une réservation (par exemple un désaccord sur une retenue de caution ou l'état du véhicule), vous pouvez le signaler dans l'application. Terima Rides examinera les photos de prise en charge/retour et les versions des deux parties pour tenter de trouver une solution, mais nous ne sommes ni un tribunal ni un arbitre et ne pouvons contraindre personne à payer ou rembourser quoi que ce soit." },
+        { h: "7. Responsabilités du loueur", b: "Les loueurs sont responsables de s'assurer que leurs véhicules sont en état de rouler, assurés et légalement autorisés à la location au Vanuatu, de l'exactitude de leurs annonces, et du respect de toutes les lois locales applicables." },
+        { h: "8. Responsabilités du client", b: "Les clients sont responsables de détenir un permis de conduire valide (et un permis de conduire international si requis), de conduire prudemment et dans le respect de la loi, et de restituer le véhicule dans l'état convenu avec le loueur." },
+        { h: "9. Comportements interdits", b: "Vous ne pouvez pas utiliser Terima Rides pour publier ou réserver un véhicule de manière frauduleuse, contourner la vérification d'identité, ou harceler ou discriminer un autre utilisateur." },
+        { h: "10. Responsabilité", b: "Terima Rides fournit la plateforme « en l'état » et n'est pas responsable de l'état d'un véhicule, du comportement d'un loueur ou d'un client, ni d'une perte découlant d'une réservation. Rien dans ces conditions ne limite une responsabilité qui ne peut légalement être limitée." },
+        { h: "11. Modifications de ces conditions", b: "Nous pouvons mettre à jour ces conditions de temps à autre ; continuer à utiliser Terima Rides après une modification signifie que vous acceptez les conditions mises à jour." },
+        { h: "12. Droit applicable", b: "Ces conditions sont régies par les lois du Vanuatu." },
+        { h: "13. Contact", b: `Pour toute question sur ces conditions, écrivez à ${SUPPORT_EMAIL}.` },
+      ],
+    },
+    privacy: {
+      title: "Politique de confidentialité",
+      sections: [
+        { h: "1. Ce que nous collectons", b: "Les informations du compte (nom, e-mail, téléphone) ; pour les clients, les informations du permis de conduire et une photo de celui-ci ; pour les loueurs, les photos des documents d'identité et du véhicule, ainsi que les informations de l'entreprise ; les détails des réservations (dates, véhicule, prix) ; les photos d'état à la prise en charge/au retour ; ainsi que tout message ou signalement de litige que vous soumettez dans l'application." },
+        { h: "2. Pourquoi nous les collectons", b: "Pour vérifier votre identité avant de pouvoir réserver ou publier un véhicule, pour gérer les réservations et la facturation, pour protéger les deux parties en cas de litige sur l'état d'un véhicule, et pour communiquer avec vous au sujet de vos réservations et de votre compte." },
+        { h: "3. Qui peut y accéder", b: "Vos propres informations de compte vous sont visibles. Un loueur peut voir les informations de réservation et de contact d'un client qui réserve son véhicule (et inversement) afin que la location puisse avoir lieu. Les administrateurs de Terima Rides peuvent accéder aux documents d'identité et du véhicule uniquement pour vérifier les loueurs et examiner les litiges. Nous ne vendons pas vos informations personnelles à des tiers et ne les utilisons pas à des fins publicitaires." },
+        { h: "4. Où elles sont stockées", b: "Vos données sont stockées chez notre fournisseur de base de données et de stockage de fichiers (Supabase), avec des contrôles d'accès garantissant que les documents d'identité et les photos de véhicules ne sont accessibles qu'au compte concerné, à la contrepartie d'une réservation active, ou à un administrateur." },
+        { h: "5. Durée de conservation", b: "Nous conservons les données de compte et de réservation aussi longtemps que votre compte est actif, et pendant une période raisonnable ensuite pour répondre aux besoins légaux, comptables et de résolution de litiges." },
+        { h: "6. Vos choix", b: `Vous pouvez nous demander de consulter les informations personnelles que nous détenons à votre sujet, de les corriger, ou de supprimer votre compte, en écrivant à ${SUPPORT_EMAIL}. La suppression de votre compte peut affecter les réservations en cours.` },
+        { h: "7. Stockage local", b: "L'application utilise le stockage local de votre navigateur pour vous garder connecté entre les visites ; ces données restent sur votre appareil et nous ne pouvons pas les consulter à distance." },
+        { h: "8. Modifications de cette politique", b: "Nous pouvons mettre à jour cette politique de temps à autre ; la date de « dernière mise à jour » en haut reflétera la modification la plus récente." },
+        { h: "9. Contact", b: `Pour toute question sur cette politique, écrivez à ${SUPPORT_EMAIL}.` },
+      ],
+    },
+    cancellation: {
+      title: "Annulation et remboursements",
+      sections: [
+        { h: "1. Les remboursements passent par le loueur", b: "Terima Rides ne traitant pas les paiements de location, nous ne pouvons pas émettre de remboursements nous-mêmes — les remboursements, le cas échéant, proviennent directement du loueur." },
+        { h: "2. Annuler une réservation", b: "Vous pouvez annuler une réservation en attente ou acceptée depuis « Mes réservations » dans l'application, à tout moment avant la prise en charge. Le statut de la réservation est mis à jour immédiatement pour vous et pour le loueur." },
+        { h: "3. Remboursements", b: "Le remboursement, total ou partiel, d'une somme déjà versée à un loueur relève de vous et de ce loueur. Si vous avez versé une caution directement à un loueur et pensez qu'elle est retenue injustement après une annulation, vous pouvez signaler un litige dans l'application et nous l'examinerons." },
+        { h: "4. Annulations par le loueur", b: "Un loueur peut refuser une demande en attente sans frais pour personne. Si un loueur annule une réservation que vous aviez déjà organisée, contactez-le directement au sujet de toute somme versée, et signalez un litige dans l'application si vous ne parvenez pas à un accord." },
+        { h: "5. Non-présentation", b: "Si vous ne venez pas récupérer le véhicule à l'heure convenue sans avoir annulé, la politique de non-présentation propre au loueur (indiquée dans son annonce ou convenue directement avec vous) s'applique." },
+      ],
+    },
+  },
+};
+
 /* ---------------------------------- header ---------------------------------- */
 
 function Header({ mode, setMode, idVerified, onOpenAuth }) {
@@ -1687,6 +1787,101 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
             {t("auth.signIn")}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------- footer + legal ---------------------------------- */
+
+const FOOTER_TEXT = {
+  en: {
+    tagline: "Efate Island, Vanuatu",
+    terms: "Terms",
+    privacy: "Privacy",
+    cancellation: "Cancellation",
+    contact: "Contact us",
+    rights: (year) => `© ${year} Terima Rides`,
+  },
+  fr: {
+    tagline: "Île d'Efate, Vanuatu",
+    terms: "Conditions",
+    privacy: "Confidentialité",
+    cancellation: "Annulation",
+    contact: "Nous contacter",
+    rights: (year) => `© ${year} Terima Rides`,
+  },
+};
+
+function Footer({ onOpenLegal }) {
+  const { lang } = useLang();
+  const ft = FOOTER_TEXT[lang] || FOOTER_TEXT.en;
+  const year = new Date().getFullYear();
+  return (
+    <div className="mt-auto" style={{ borderTop: `1px solid ${C.line}` }}>
+      <div className="max-w-5xl mx-auto px-5 md:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: C.coral }}>
+            <Compass size={13} color="#fff" />
+          </div>
+          <span style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7 }}>
+            {ft.rights(year)} · {ft.tagline}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap justify-center">
+          <button onClick={() => onOpenLegal("terms")} className="text-xs" style={{ ...body, color: C.mist, opacity: 0.75 }}>{ft.terms}</button>
+          <button onClick={() => onOpenLegal("privacy")} className="text-xs" style={{ ...body, color: C.mist, opacity: 0.75 }}>{ft.privacy}</button>
+          <button onClick={() => onOpenLegal("cancellation")} className="text-xs" style={{ ...body, color: C.mist, opacity: 0.75 }}>{ft.cancellation}</button>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-xs flex items-center gap-1" style={{ ...body, color: C.mist, opacity: 0.75 }}>
+            <Mail size={11} /> {ft.contact}
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegalModal({ tab, onClose }) {
+  const { lang } = useLang();
+  const [active, setActive] = useState(tab || "terms");
+  const content = (LEGAL_CONTENT[lang] || LEGAL_CONTENT.en)[active];
+  const tabs = [
+    { id: "terms", label: (LEGAL_CONTENT[lang] || LEGAL_CONTENT.en).terms.title },
+    { id: "privacy", label: (LEGAL_CONTENT[lang] || LEGAL_CONTENT.en).privacy.title },
+    { id: "cancellation", label: (LEGAL_CONTENT[lang] || LEGAL_CONTENT.en).cancellation.title },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.7)" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl rounded-2xl overflow-hidden max-h-[85vh] flex flex-col" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+          <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{content.title}</span>
+          <button onClick={onClose}><X size={18} color={C.mist} /></button>
+        </div>
+
+        <div className="flex items-center gap-1 px-5 pt-3">
+          {tabs.map((tb) => (
+            <button
+              key={tb.id}
+              onClick={() => setActive(tb.id)}
+              className="px-3 py-1.5 rounded-full text-xs"
+              style={{ ...body, fontWeight: 600, backgroundColor: active === tb.id ? C.lagoon : "transparent", color: active === tb.id ? "#fff" : C.mist }}
+            >
+              {tb.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-auto p-5">
+          <div style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginBottom: 14 }}>
+            {lang === "fr" ? "Dernière mise à jour : " : "Last updated: "}{LEGAL_UPDATED}
+          </div>
+          {content.sections.map((s, i) => (
+            <div key={i} className="mb-4">
+              <div style={{ ...body, fontWeight: 700, fontSize: 13, color: C.sand, marginBottom: 4 }}>{s.h}</div>
+              <div style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.85, lineHeight: 1.6 }}>{s.b}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -6111,6 +6306,7 @@ function AppInner() {
   const [idVerified, setIdVerified] = useState(false);
   const [verificationChecked, setVerificationChecked] = useState(!SUPABASE_CONFIGURED);
   const [showIdModal, setShowIdModal] = useState(false);
+  const [legalTab, setLegalTab] = useState(null);
   const [pendingVehicle, setPendingVehicle] = useState(null);
   const [compareIds, setCompareIds] = useState([]);
   const [showCompare, setShowCompare] = useState(false);
@@ -6306,6 +6502,8 @@ function AppInner() {
         <SupplierDashboard onOpenAuth={() => setShowAuth(true)} />
       )}
 
+      <Footer onOpenLegal={setLegalTab} />
+
       {selected && (
         <VehicleDetail
           v={selected}
@@ -6330,6 +6528,7 @@ function AppInner() {
       )}
       {booking && <BookingModal v={booking} resumeBooking={resumeBookingId} onClose={() => { setBooking(null); setResumeBookingId(null); }} />}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {legalTab && <LegalModal tab={legalTab} onClose={() => setLegalTab(null)} />}
     </div>
   );
 }
