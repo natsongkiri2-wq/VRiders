@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp, Compass,
-  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container
+  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -500,6 +500,7 @@ const STRINGS = {
       pickupNoteLabel: "Pickup note:", returnNoteLabel: "Return note:",
       reviewsFromCustomers: "Reviews from customers",
       yourListings: "Your listings", addVehicle: "Add vehicle", pending: "Pending", changePhoto: "Add or change photo",
+      editVehicle: "Edit vehicle",
       managePhotos: "Manage photos", addPhoto: "Add photo", removePhoto: "Remove photo", donePhotos: "Done",
       photoLimitNote: "Up to {max} photos — customers see all of them on the listing.",
       serviceFeeLabel: "Service fee:", serviceFee: "Efate Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
@@ -542,6 +543,10 @@ const STRINGS = {
       photoNote: "This supplier hasn't added photos yet — shown here with a colour-coded icon instead.",
       reviewListing: "Review listing", publish: "Publish listing",
       previewNote: "This is how customers will see it. New listings are marked pending until you've completed verification.",
+    },
+    editVehicle: {
+      title: "Edit vehicle",
+      saveChanges: "Save changes",
     },
     kyc: {
       gateTitle: "List your vehicles on Efate Rides",
@@ -776,6 +781,7 @@ const STRINGS = {
       pickupNoteLabel: "Note de départ :", returnNoteLabel: "Note de retour :",
       reviewsFromCustomers: "Avis des clients",
       yourListings: "Vos annonces", addVehicle: "Ajouter un véhicule", pending: "En attente", changePhoto: "Ajouter ou changer la photo",
+      editVehicle: "Modifier le véhicule",
       managePhotos: "Gérer les photos", addPhoto: "Ajouter une photo", removePhoto: "Supprimer la photo", donePhotos: "Terminé",
       photoLimitNote: "Jusqu'à {max} photos — les clients les voient toutes sur l'annonce.",
       serviceFeeLabel: "Frais de service :", serviceFee: "Efate Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
@@ -818,6 +824,10 @@ const STRINGS = {
       photoNote: "Ce loueur n'a pas encore ajouté de photos — affiché ici avec une icône colorée à la place.",
       reviewListing: "Vérifier l'annonce", publish: "Publier l'annonce",
       previewNote: "Voici comment les clients la verront. Les nouvelles annonces sont marquées en attente jusqu'à la vérification.",
+    },
+    editVehicle: {
+      title: "Modifier le véhicule",
+      saveChanges: "Enregistrer les modifications",
     },
     kyc: {
       gateTitle: "Publiez vos véhicules sur Efate Rides",
@@ -3477,6 +3487,143 @@ function AddVehicleModal({ onClose, onAdd }) {
   );
 }
 
+// Lets a supplier correct a listing's own details after publishing — name,
+// price, deposit policy, etc. Previously the only post-publish action was
+// managing photos, so fixing a wrong deposit setting meant re-listing.
+function EditVehicleModal({ vehicle, onClose, onSave, saving, error }) {
+  const { t } = useLang();
+  const [form, setForm] = useState({
+    name: vehicle.name || "",
+    type: vehicle.type || "car",
+    seats: vehicle.seats != null ? String(vehicle.seats) : "",
+    trans: vehicle.trans || "Auto",
+    fuel: vehicle.fuel || "Petrol",
+    area: vehicle.area || "",
+    airport: !!vehicle.airport,
+    price: vehicle.price != null ? String(vehicle.price) : "",
+    depositOn: !!vehicle.deposit,
+    depositAmount: vehicle.deposit ? String(vehicle.deposit) : "",
+  });
+  const set = (k, v) => setForm({ ...form, [k]: v });
+  const valid = form.name.trim() && form.seats && form.price && (!form.depositOn || form.depositAmount);
+
+  const save = () => {
+    if (!valid || saving) return;
+    onSave({
+      name: form.name.trim(),
+      type: form.type,
+      seats: Number(form.seats),
+      trans: form.trans,
+      fuel: form.fuel,
+      area: form.area,
+      airport: form.airport,
+      price: Number(form.price),
+      deposit: form.depositOn ? Number(form.depositAmount) : 0,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.65)" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{t("editVehicle.title")}</span>
+          <button onClick={onClose}><X size={18} color={C.mist} /></button>
+        </div>
+        <div className="flex flex-col gap-3.5">
+          <div>
+            <FieldLabel>{t("addVehicle.vehicleName")}</FieldLabel>
+            <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={t("addVehicle.vehicleNamePh")}
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <FieldLabel>{t("addVehicle.vehicleType")}</FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(TYPE_META).map(([key, m]) => {
+                const Icon = m.icon;
+                const active = form.type === key;
+                return (
+                  <button key={key} onClick={() => set("type", key)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs"
+                    style={{ ...body, fontWeight: 500, backgroundColor: active ? C.coral : "transparent", color: active ? "#fff" : C.mist, border: `1px solid ${active ? "transparent" : C.line}` }}>
+                    <Icon size={13} /> {t(`types.${key}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <FieldLabel>{t("addVehicle.seats")}</FieldLabel>
+              <input type="number" min="1" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="5"
+                className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <FieldLabel>{t("addVehicle.pickupArea")}</FieldLabel>
+              <input value={form.area} onChange={(e) => set("area", e.target.value)} placeholder="Port Vila"
+                className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <FieldLabel>{t("addVehicle.transmission")}</FieldLabel>
+              <select value={form.trans} onChange={(e) => set("trans", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
+                <option style={{ color: C.ink }}>Auto</option>
+                <option style={{ color: C.ink }}>Manual</option>
+                <option style={{ color: C.ink }}>—</option>
+              </select>
+            </div>
+            <div>
+              <FieldLabel>{t("addVehicle.fuel")}</FieldLabel>
+              <select value={form.fuel} onChange={(e) => set("fuel", e.target.value)} className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle}>
+                <option style={{ color: C.ink }}>Petrol</option>
+                <option style={{ color: C.ink }}>Diesel</option>
+                <option style={{ color: C.ink }}>Electric</option>
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2.5 cursor-pointer mt-0.5">
+            <input type="checkbox" checked={form.airport} onChange={(e) => set("airport", e.target.checked)} />
+            <span style={{ ...body, fontSize: 12.5, color: C.sand }}>{t("addVehicle.offerAirport")}</span>
+          </label>
+          <div>
+            <FieldLabel>{t("addVehicle.pricePerDay")}</FieldLabel>
+            <input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="8500"
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <FieldLabel>{t("addVehicle.depositPolicy")}</FieldLabel>
+            <div className="flex gap-1.5">
+              <button onClick={() => set("depositOn", false)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs"
+                style={{ ...body, fontWeight: 500, backgroundColor: !form.depositOn ? C.lagoon : "transparent", color: !form.depositOn ? "#fff" : C.mist, border: `1px solid ${!form.depositOn ? "transparent" : C.line}` }}>
+                <ShieldOff size={13} /> {t("addVehicle.noDeposit")}
+              </button>
+              <button onClick={() => set("depositOn", true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs"
+                style={{ ...body, fontWeight: 500, backgroundColor: form.depositOn ? C.coral : "transparent", color: form.depositOn ? "#fff" : C.mist, border: `1px solid ${form.depositOn ? "transparent" : C.line}` }}>
+                <ShieldCheck size={13} /> {t("addVehicle.depositRequired")}
+              </button>
+            </div>
+          </div>
+          {form.depositOn && (
+            <div>
+              <FieldLabel>{t("addVehicle.depositAmount")}</FieldLabel>
+              <input type="number" min="0" value={form.depositAmount} onChange={(e) => set("depositAmount", e.target.value)} placeholder="20000"
+                className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+            </div>
+          )}
+          {error && (
+            <p style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{error}</p>
+          )}
+          <button disabled={!valid || saving} onClick={save}
+            className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40 mt-1"
+            style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} {t("editVehicle.saveChanges")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const MAX_VEHICLE_PHOTOS = 6;
 
 // Lets a supplier build up a real set of photos on a listing instead of
@@ -4716,6 +4863,9 @@ function SupplierDashboard({ onOpenAuth }) {
   const [photoUploadingId, setPhotoUploadingId] = useState(null);
   const [managingPhotosId, setManagingPhotosId] = useState(null);
   const [removingPhotoUrl, setRemovingPhotoUrl] = useState(null);
+  const [editingVehicleId, setEditingVehicleId] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const usingRealData = SUPABASE_CONFIGURED && !!profile;
 
@@ -5100,6 +5250,39 @@ function SupplierDashboard({ onOpenAuth }) {
     setShowAdd(false);
     setJustAdded(vehicle.name);
     setTimeout(() => setJustAdded(null), 4000);
+  };
+
+  // Saves changes to an already-published listing — name, price, deposit
+  // policy, etc. — from the edit modal below.
+  const saveVehicleEdit = async (vehicleId, patch) => {
+    setSavingEdit(true);
+    setEditError("");
+    if (usingRealData) {
+      try {
+        await sbUpdate("rental_vehicles", `id=eq.${vehicleId}`, {
+          name: patch.name,
+          type: patch.type,
+          seats: patch.seats,
+          transmission: patch.trans,
+          fuel: patch.fuel,
+          area: patch.area,
+          airport_pickup: patch.airport,
+          price_per_day: patch.price,
+          deposit_amount: patch.deposit,
+        }, accessToken);
+      } catch (e) {
+        setEditError(e.message);
+        setSavingEdit(false);
+        return;
+      }
+    }
+    setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? {
+      ...v,
+      name: patch.name, type: patch.type, seats: patch.seats, trans: patch.trans,
+      fuel: patch.fuel, area: patch.area, airport: patch.airport, price: patch.price, deposit: patch.deposit,
+    } : v)));
+    setSavingEdit(false);
+    setEditingVehicleId(null);
   };
 
   const reviewsSource = supplierReviews;
@@ -5495,6 +5678,14 @@ function SupplierDashboard({ onOpenAuth }) {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => setEditingVehicleId(v.id)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ border: `1px solid ${C.line}` }}
+                    title={t("supplier.editVehicle")}
+                  >
+                    <Pencil size={14} color={C.mist} />
+                  </button>
                   <DepositGauge amount={v.deposit} size={28} />
                 </div>
               );
@@ -5563,6 +5754,19 @@ function SupplierDashboard({ onOpenAuth }) {
             onRemove={(url) => removeVehiclePhoto(managingPhotosId, url)}
             uploading={photoUploadingId === managingPhotosId}
             removingUrl={removingPhotoUrl}
+          />
+        );
+      })()}
+      {editingVehicleId && (() => {
+        const vehicle = myVehicles.find((v) => v.id === editingVehicleId);
+        if (!vehicle) return null;
+        return (
+          <EditVehicleModal
+            vehicle={vehicle}
+            onClose={() => { setEditingVehicleId(null); setEditError(""); }}
+            onSave={(patch) => saveVehicleEdit(editingVehicleId, patch)}
+            saving={savingEdit}
+            error={editError}
           />
         );
       })()}
