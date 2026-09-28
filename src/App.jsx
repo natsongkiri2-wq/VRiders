@@ -156,6 +156,112 @@ const KYC_DOCUMENTS_BUCKET = "kyc-documents";
 // exist in the Supabase project.
 const BOOKING_PHOTOS_BUCKET = "booking-photos";
 
+/* ------------------------- image upload preparation ------------------------- */
+
+// Phone cameras produce 8–20MB photos, and every upload path in this app
+// (KYC documents, vehicle listing photos, pickup/return condition shots)
+// used to hand that original file straight to Supabase Storage. Three
+// problems with that: it burns the free tier's 1GB Storage quota in a few
+// dozen uploads, a 15MB upload over a Port Vila mobile connection is slow
+// enough that people assume it failed and retry, and nothing in the app
+// ever displays these images above ~800px anyway.
+//
+// So every picked image is decoded, downscaled to at most
+// IMAGE_MAX_DIMENSION on its longest side, and re-encoded as JPEG before
+// it goes anywhere — typically 8MB down to ~300KB with no visible
+// difference at the sizes these are shown at.
+const IMAGE_MAX_DIMENSION = 1600;
+const IMAGE_JPEG_QUALITY = 0.82;
+
+// Hard ceiling. Only reachable by a file the browser couldn't decode (so
+// it was passed through uncompressed — HEIC on Chrome, say) or something
+// genuinely enormous. Refused rather than uploaded.
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_MAX_MB = Math.round(IMAGE_MAX_BYTES / (1024 * 1024));
+
+// Under this, re-encoding costs more in quality than it saves in bytes.
+const IMAGE_SKIP_COMPRESS_BYTES = 400 * 1024;
+
+// Errors carry a `code` so the pickers can show a translated message
+// instead of a raw English string from a thrown Error.
+function imageError(code, vars) {
+  const err = new Error(code);
+  err.code = code;
+  err.vars = vars || {};
+  return err;
+}
+
+// Turns an image error into a translated, user-facing message. Anything
+// unrecognised (a network failure mid-upload, say) falls through to its
+// own message so real errors aren't swallowed by a generic one.
+function imageErrorMessage(err, t) {
+  if (err && err.code === "photo.tooLarge") return t("photo.tooLarge", err.vars);
+  if (err && err.code === "photo.notAnImage") return t("photo.notAnImage");
+  if (err && err.code === "photo.failed") return t("photo.failed");
+  return (err && err.message) || t("photo.failed");
+}
+
+// Decodes and downscales via canvas. Resolves with the original file
+// untouched if re-encoding wouldn't actually make it smaller; rejects if
+// the browser can't decode the format at all.
+function downscaleImage(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const longest = Math.max(img.width, img.height);
+      if (!longest) { resolve(file); return; }
+      const scale = Math.min(1, IMAGE_MAX_DIMENSION / longest);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) { resolve(file); return; }
+          // The .jpg rename is load-bearing: every upload call site
+          // derives the Storage object's extension from this file's
+          // name, so a re-encoded .png must not keep its old extension.
+          const base = (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
+          resolve(new File([blob], `${base}.jpg`, { type: "image/jpeg", lastModified: Date.now() }));
+        },
+        "image/jpeg",
+        IMAGE_JPEG_QUALITY
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(imageError("photo.failed")); };
+    img.src = objectUrl;
+  });
+}
+
+// The one entry point every file picker in the app goes through. Returns
+// the file to actually upload (compressed where possible) or throws an
+// error carrying a `code` the picker can translate.
+async function prepareImageUpload(file) {
+  if (!file) return file;
+  if (!(file.type || "").startsWith("image/")) throw imageError("photo.notAnImage");
+  if (file.size <= IMAGE_SKIP_COMPRESS_BYTES) return file;
+
+  let processed = file;
+  try {
+    processed = await downscaleImage(file);
+  } catch {
+    // Undecodable format — keep the original and let the cap below
+    // decide, rather than blocking an upload that might be fine.
+    processed = file;
+  }
+  if (processed.size > IMAGE_MAX_BYTES) {
+    throw imageError("photo.tooLarge", {
+      size: (processed.size / (1024 * 1024)).toFixed(1),
+      max: IMAGE_MAX_MB,
+    });
+  }
+  return processed;
+}
+
 // Uploads a single file to a Supabase Storage bucket and returns its public
 // URL. Path should be unique per object (we namespace by user id + vehicle
 // id) so re-uploads don't collide across suppliers.
@@ -587,6 +693,12 @@ const STRINGS = {
       simulateApproval: "Simulate approval",
       verifiedBadge: "Verified supplier",
     },
+    photo: {
+      tooLarge: "That photo is too large ({size}MB). Please pick one under {max}MB.",
+      notAnImage: "That file isn't a photo — pick a JPG or PNG image.",
+      failed: "Couldn't read that photo. Try taking it again.",
+      compressing: "Preparing photo…",
+    },
   },
 
   fr: {
@@ -874,6 +986,12 @@ const STRINGS = {
       realPendingNote: "Aucune action requise de votre part — cette page se mettra à jour automatiquement dès votre approbation.",
       simulateApproval: "Simuler l'approbation",
       verifiedBadge: "Loueur vérifié",
+    },
+    photo: {
+      tooLarge: "Cette photo est trop lourde ({size} Mo). Choisissez-en une de moins de {max} Mo.",
+      notAnImage: "Ce fichier n'est pas une photo — choisissez une image JPG ou PNG.",
+      failed: "Impossible de lire cette photo. Reprenez-la.",
+      compressing: "Préparation de la photo…",
     },
   },
 };
@@ -2457,14 +2575,30 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // Which tile is currently having its photo downscaled. Re-encoding a
+  // 12MP shot takes a beat on a cheap phone, and without this the tile
+  // just sits there looking like the tap did nothing.
+  const [preparingId, setPreparingId] = useState(null);
   const done = Object.keys(photos).length;
   const total = CHECK_ITEMS.length;
   const itemLabels = t("checklist.items");
 
   const capture = async (id, file) => {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setPhotos((p) => ({ ...p, [id]: { dataUrl, file, time: new Date() } }));
+    setSaveError("");
+    setPreparingId(id);
+    try {
+      // Condition photos are the heaviest thing this app uploads — six
+      // per checklist, two checklists per booking. Compressed before
+      // they're held in state, so what's previewed is what's uploaded.
+      const prepared = await prepareImageUpload(file);
+      const dataUrl = await fileToDataUrl(prepared);
+      setPhotos((p) => ({ ...p, [id]: { dataUrl, file: prepared, time: new Date() } }));
+    } catch (e) {
+      setSaveError(imageErrorMessage(e, t));
+    } finally {
+      setPreparingId(null);
+    }
   };
 
   const handleSave = async () => {
@@ -2510,7 +2644,12 @@ function ConditionChecklist({ mode, vehicleName, initialPhotos, onClose, onSave 
                   onChange={(e) => capture(item.id, e.target.files && e.target.files[0])}
                 />
                 <div className="aspect-square flex items-center justify-center relative">
-                  {shot && shot.dataUrl ? (
+                  {preparingId === item.id ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <Loader2 size={18} color={C.mist} className="animate-spin" />
+                      <span style={{ ...body, fontSize: 8.5, color: C.mist, opacity: 0.6 }}>{t("photo.compressing")}</span>
+                    </div>
+                  ) : shot && shot.dataUrl ? (
                     <img src={shot.dataUrl} alt={label} className="w-full h-full object-cover" />
                   ) : shot ? (
                     <div className="flex flex-col items-center gap-1">
@@ -3379,10 +3518,21 @@ function IDVerificationModal({ onClose, onVerified }) {
   const needsIDP = form.country !== "Vanuatu" && form.country !== "";
   const valid = form.fullName.trim() && form.phone.trim() && form.licenseNumber.trim() && form.expiry && form.photo;
 
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
+
   const handlePhoto = async (file) => {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setForm((f) => ({ ...f, photo: dataUrl, photoFile: file }));
+    setError("");
+    setPreparingPhoto(true);
+    try {
+      const prepared = await prepareImageUpload(file);
+      const dataUrl = await fileToDataUrl(prepared);
+      setForm((f) => ({ ...f, photo: dataUrl, photoFile: prepared }));
+    } catch (e) {
+      setError(imageErrorMessage(e, t));
+    } finally {
+      setPreparingPhoto(false);
+    }
   };
 
   const submit = async () => {
@@ -3492,7 +3642,12 @@ function IDVerificationModal({ onClose, onVerified }) {
                 >
                   <input type="file" accept="image/*" capture="environment" className="hidden"
                     onChange={(e) => handlePhoto(e.target.files && e.target.files[0])} />
-                  {form.photo ? (
+                  {preparingPhoto ? (
+                    <>
+                      <Loader2 size={20} color={C.mist} className="animate-spin" />
+                      <span style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginTop: 6 }}>{t("photo.compressing")}</span>
+                    </>
+                  ) : form.photo ? (
                     <>
                       <img src={form.photo} alt="License" className="w-full h-full object-cover" />
                       <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}>
@@ -3567,11 +3722,22 @@ function AddVehicleModal({ onClose, onAdd }) {
     price: "", depositOn: false, depositAmount: "", photoFile: null, photoPreview: null, priceTiers: [],
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
+  const [photoError, setPhotoError] = useState("");
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
 
   const handlePhoto = async (file) => {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setForm((f) => ({ ...f, photoFile: file, photoPreview: dataUrl }));
+    setPhotoError("");
+    setPreparingPhoto(true);
+    try {
+      const prepared = await prepareImageUpload(file);
+      const dataUrl = await fileToDataUrl(prepared);
+      setForm((f) => ({ ...f, photoFile: prepared, photoPreview: dataUrl }));
+    } catch (e) {
+      setPhotoError(imageErrorMessage(e, t));
+    } finally {
+      setPreparingPhoto(false);
+    }
   };
 
   // Suppliers can offer a lower per-day rate for longer stays — any number
@@ -3752,7 +3918,12 @@ function AddVehicleModal({ onClose, onAdd }) {
               >
                 <input type="file" accept="image/*" className="hidden"
                   onChange={(e) => handlePhoto(e.target.files && e.target.files[0])} />
-                {form.photoPreview ? (
+                {preparingPhoto ? (
+                  <>
+                    <Loader2 size={18} color={C.mist} className="animate-spin" />
+                    <span style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.7, marginTop: 6 }}>{t("photo.compressing")}</span>
+                  </>
+                ) : form.photoPreview ? (
                   <>
                     <img src={form.photoPreview} alt={form.name} className="w-full h-full object-cover" />
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}>
@@ -3766,6 +3937,9 @@ function AddVehicleModal({ onClose, onAdd }) {
                   </>
                 )}
               </label>
+              {photoError && (
+                <p style={{ ...body, fontSize: 11.5, color: C.hibiscus, marginTop: 6 }}>{photoError}</p>
+              )}
               <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
                 {t("addVehicle.photoOptionalNote")}
               </p>
@@ -4013,7 +4187,7 @@ const MAX_VEHICLE_PHOTOS = 6;
 // the old single "change photo" control, which just overwrote photo_urls
 // with a single-element array every time — so a vehicle could never have
 // more than one photo no matter how many times a supplier uploaded.
-function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, removingUrl }) {
+function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, removingUrl, error }) {
   const { t } = useLang();
   const photos = vehicle.photoUrls || [];
   const atLimit = photos.length >= MAX_VEHICLE_PHOTOS;
@@ -4060,6 +4234,11 @@ function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, remov
             </label>
           )}
         </div>
+        {error && (
+          <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+            <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{error}</span>
+          </div>
+        )}
         <button onClick={onClose} className="w-full mt-5 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
           {t("supplier.donePhotos")}
         </button>
@@ -4464,13 +4643,26 @@ function SupplierKYCModal({ onClose, onSubmit }) {
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
 
+  const [submitError, setSubmitError] = useState("");
+  const [preparingKey, setPreparingKey] = useState(null);
+
   const handleUpload = async (key, file) => {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    setForm((f) => ({ ...f, [key]: dataUrl, [key + "File"]: file }));
+    setSubmitError("");
+    setPreparingKey(key);
+    try {
+      // KYC documents are photographed ID cards and registration papers
+      // — always phone-camera sized, and only ever viewed by an admin in
+      // a modal, so the same downscale applies.
+      const prepared = await prepareImageUpload(file);
+      const dataUrl = await fileToDataUrl(prepared);
+      setForm((f) => ({ ...f, [key]: dataUrl, [key + "File"]: prepared }));
+    } catch (e) {
+      setSubmitError(imageErrorMessage(e, t));
+    } finally {
+      setPreparingKey(null);
+    }
   };
-
-  const [submitError, setSubmitError] = useState("");
 
   const step0Valid = form.businessName.trim() && form.contactName.trim() && form.phone.trim() && form.email.trim();
   const step1Valid = form.idDoc && form.vehicleDoc && form.agree;
@@ -4576,7 +4768,12 @@ function SupplierKYCModal({ onClose, onSubmit }) {
                   <label className="rounded-xl overflow-hidden cursor-pointer flex flex-col items-center justify-center relative"
                     style={{ backgroundColor: C.void, border: `1px solid ${form.idDoc ? C.lagoon : C.line}`, height: 90 }}>
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleUpload("idDoc", e.target.files && e.target.files[0])} />
-                    {form.idDoc ? (
+                    {preparingKey === "idDoc" ? (
+                      <>
+                        <Loader2 size={18} color={C.mist} className="animate-spin" />
+                        <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 5 }}>{t("photo.compressing")}</span>
+                      </>
+                    ) : form.idDoc ? (
                       <>
                         <img src={form.idDoc} alt="ID doc" className="w-full h-full object-cover" />
                         <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}><Check size={11} color="#fff" /></div>
@@ -4594,7 +4791,12 @@ function SupplierKYCModal({ onClose, onSubmit }) {
                   <label className="rounded-xl overflow-hidden cursor-pointer flex flex-col items-center justify-center relative"
                     style={{ backgroundColor: C.void, border: `1px solid ${form.vehicleDoc ? C.lagoon : C.line}`, height: 90 }}>
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleUpload("vehicleDoc", e.target.files && e.target.files[0])} />
-                    {form.vehicleDoc ? (
+                    {preparingKey === "vehicleDoc" ? (
+                      <>
+                        <Loader2 size={18} color={C.mist} className="animate-spin" />
+                        <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 5 }}>{t("photo.compressing")}</span>
+                      </>
+                    ) : form.vehicleDoc ? (
                       <>
                         <img src={form.vehicleDoc} alt="Vehicle doc" className="w-full h-full object-cover" />
                         <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}><Check size={11} color="#fff" /></div>
@@ -4607,6 +4809,11 @@ function SupplierKYCModal({ onClose, onSubmit }) {
                     )}
                   </label>
                 </div>
+                {submitError && (
+                  <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                    <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{submitError}</span>
+                  </div>
+                )}
                 <label className="flex items-start gap-2.5 cursor-pointer mt-0.5">
                   <input type="checkbox" checked={form.agree} onChange={(e) => set("agree", e.target.checked)} className="mt-0.5" />
                   <span style={{ ...body, fontSize: 12, color: C.sand, lineHeight: 1.5 }}>{t("kyc.agree")}</span>
@@ -5246,6 +5453,7 @@ function SupplierDashboard({ onOpenAuth }) {
   const [photoUploadingId, setPhotoUploadingId] = useState(null);
   const [managingPhotosId, setManagingPhotosId] = useState(null);
   const [removingPhotoUrl, setRemovingPhotoUrl] = useState(null);
+  const [photoError, setPhotoError] = useState("");
   const [editingVehicleId, setEditingVehicleId] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
@@ -5260,19 +5468,27 @@ function SupplierDashboard({ onOpenAuth }) {
   const addVehiclePhoto = async (vehicleId, file) => {
     if (!file || !usingRealData) return;
     setPhotoUploadingId(vehicleId);
+    setPhotoError("");
     try {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      // Downscaled before upload — a listing photo is never displayed
+      // larger than the detail-page gallery, so the 8MB original off a
+      // phone is pure Storage quota with no benefit.
+      const prepared = await prepareImageUpload(file);
+      const ext = (prepared.name.split(".").pop() || "jpg").toLowerCase();
       // Storage RLS on vehicle-photos checks the path's first folder
       // against suppliers.id (profile.id), not the auth user id — using
       // profile.user_id here silently failed every upload via RLS.
       const path = `${profile.id}/${vehicleId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-      const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, file, accessToken);
+      const url = await sbUploadFile(VEHICLE_PHOTOS_BUCKET, path, prepared, accessToken);
       const current = (myVehicles.find((v) => v.id === vehicleId) || {}).photoUrls || [];
       const nextUrls = [...current, url];
       await sbUpdate("rental_vehicles", `id=eq.${vehicleId}`, { photo_urls: nextUrls }, accessToken);
       setMyVehicles((prev) => prev.map((v) => (v.id === vehicleId ? { ...v, photoUrls: nextUrls, photoUrl: v.photoUrl || url } : v)));
     } catch (e) {
+      // This used to be console.error only — which is exactly how the
+      // RLS path bug went unnoticed for weeks. Surface it in the modal.
       console.error("Vehicle photo upload failed:", e.message);
+      setPhotoError(imageErrorMessage(e, t));
     } finally {
       setPhotoUploadingId(null);
     }
@@ -6140,11 +6356,12 @@ function SupplierDashboard({ onOpenAuth }) {
         return (
           <ManagePhotosModal
             vehicle={vehicle}
-            onClose={() => setManagingPhotosId(null)}
+            onClose={() => { setManagingPhotosId(null); setPhotoError(""); }}
             onAdd={(file) => addVehiclePhoto(managingPhotosId, file)}
             onRemove={(url) => removeVehiclePhoto(managingPhotosId, url)}
             uploading={photoUploadingId === managingPhotosId}
             removingUrl={removingPhotoUrl}
+            error={photoError}
           />
         );
       })()}
