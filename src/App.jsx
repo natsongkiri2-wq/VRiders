@@ -3,7 +3,7 @@ import {
   Car, Bike, Truck, Bus, Mountain, Zap, MapPin, Star, ShieldCheck, ShieldOff,
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
-  LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp, Compass,
+  LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp,
   ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil, Mail
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
@@ -1841,15 +1841,39 @@ const LEGAL_CONTENT = {
 
 /* ---------------------------------- header ---------------------------------- */
 
+/* ---------------------------------- brand mark ---------------------------------- */
+
+// The Terima Rides mark: a location pin holding the TR monogram, with the
+// R's counter filled orange. Drawn as plain vector shapes rather than an
+// icon-font glyph or an image file, so it stays crisp at any size, needs no
+// extra asset request, and can be recoloured per placement.
+//
+// Both current placements (header, footer) sit on the dark ground, so the
+// default is the reversed colourway: sand pin with the letters cut out in
+// the app's void colour. On a light ground pass pin={C.ink} ink={C.sand}.
+function TerimaMark({ size = 32, pin = C.sand, ink = C.void, eye = C.coral }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label="Terima Rides">
+      <path fill={pin} d="M60 8C35 8 15 28 15 53C15 85 54 112 60 116C66 112 105 85 105 53C105 28 85 8 60 8Z" />
+      <g transform="translate(60,52) scale(0.56) translate(-60,-58)">
+        <rect x="10" y="22" width="52" height="14" fill={ink} />
+        <rect x="29" y="22" width="14" height="72" fill={ink} />
+        <rect x="70" y="22" width="14" height="72" fill={ink} />
+        <path d="M77 29H90A14 14 0 0 1 90 57H77" fill="none" stroke={ink} strokeWidth="14" />
+        <path d="M84 58L102 94" fill="none" stroke={ink} strokeWidth="14" />
+        <circle cx="90" cy="43" r="5.5" fill={eye} />
+      </g>
+    </svg>
+  );
+}
+
 function Header({ mode, setMode, idVerified, onOpenAuth }) {
   const { t } = useLang();
   const { user, signOut, restoringSession } = useAuth();
   return (
     <div className="flex items-center justify-between px-5 md:px-10 py-4 sticky top-0 z-30" style={{ backgroundColor: C.void, borderBottom: `1px solid ${C.line}` }}>
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: C.coral }}>
-          <Compass size={17} color="#fff" />
-        </div>
+        <TerimaMark size={32} />
         <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em" }}>Terima Rides</span>
         {mode === "renter" && idVerified && (
           <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full ml-1" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
@@ -1939,9 +1963,7 @@ function Footer({ onOpenLegal }) {
     <div className="mt-auto" style={{ borderTop: `1px solid ${C.line}` }}>
       <div className="max-w-5xl mx-auto px-5 md:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: C.coral }}>
-            <Compass size={13} color="#fff" />
-          </div>
+          <TerimaMark size={24} />
           <span style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7 }}>
             {ft.rights(year)} · {ft.tagline}
           </span>
