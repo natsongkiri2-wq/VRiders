@@ -477,6 +477,8 @@ const STRINGS = {
       sortPriceLow: "Sort: Price, low to high",
       sortPriceHigh: "Sort: Price, high to low",
       noResults: "No vehicles match those filters yet.",
+      loadingVehicles: "Loading vehicles…",
+      vehiclesLoadError: "Couldn't load live vehicles:",
     },
     types: { car: "Car", "4x4": "SUV 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "E-Bike", pickup: "Pickup 4x4" },
     card: { perDay: "VUV/day", deposit: "VUV deposit", noDeposit: "No deposit", airport: "Airport pickup", fromPrice: "from {price}/day for longer stays" },
@@ -632,6 +634,10 @@ const STRINGS = {
       colPeriod: "Period", colBookings: "Bookings", colGross: "Gross bookings", colCommission: "Commission (8%)", colStatus: "Status",
       statusPaid: "Paid", statusDue: "Due", statusOverdue: "Overdue",
       paidOn: "Paid {date}", dueOn: "Due {date}",
+      paymentRef: "Ref: {ref}",
+      paymentRefPlaceholder: "Payment reference or note (optional)",
+      confirmPaid: "Confirm paid", cancelPaid: "Cancel",
+      refSaveFailed: "Marked as paid, but the reference couldn't be saved:",
       viewDetails: "View details", hideDetails: "Hide details",
       lineItemsHeading: "Bookings this period",
       colVehicle: "Vehicle", colCustomer: "Customer", colDates: "Dates", colAmount: "Amount",
@@ -771,6 +777,8 @@ const STRINGS = {
       sortPriceLow: "Trier : Prix croissant",
       sortPriceHigh: "Trier : Prix décroissant",
       noResults: "Aucun véhicule ne correspond à ces filtres pour l'instant.",
+      loadingVehicles: "Chargement des véhicules…",
+      vehiclesLoadError: "Impossible de charger les véhicules :",
     },
     types: { car: "Voiture", "4x4": "VUS 4x4", scooter: "Scooter", van: "Van / Minibus", quad: "Quad", ebike: "Vélo électrique", pickup: "Pick-up 4x4" },
     card: { perDay: "VUV/jour", deposit: "VUV de caution", noDeposit: "Sans caution", airport: "Prise en charge à l'aéroport", fromPrice: "dès {price}/jour pour les séjours plus longs" },
@@ -926,6 +934,10 @@ const STRINGS = {
       colPeriod: "Période", colBookings: "Réservations", colGross: "Réservations brutes", colCommission: "Commission (8%)", colStatus: "Statut",
       statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard",
       paidOn: "Payée le {date}", dueOn: "Échéance {date}",
+      paymentRef: "Réf. : {ref}",
+      paymentRefPlaceholder: "Référence ou note de paiement (facultatif)",
+      confirmPaid: "Confirmer le paiement", cancelPaid: "Annuler",
+      refSaveFailed: "Marquée comme payée, mais la référence n'a pas pu être enregistrée :",
       viewDetails: "Voir le détail", hideDetails: "Masquer le détail",
       lineItemsHeading: "Réservations de cette période",
       colVehicle: "Véhicule", colCustomer: "Client", colDates: "Dates", colAmount: "Montant",
@@ -1777,7 +1789,7 @@ const LEGAL_CONTENT = {
         { h: "4. Where it's stored", b: "Your data is stored with our database and file-storage provider (Supabase), with access controls in place so that identity documents and vehicle photos are only reachable by the account they belong to, the relevant counterparty for an active booking, or an admin." },
         { h: "5. How long we keep it", b: "We keep account and booking data for as long as your account is active, and for a reasonable period after to meet legal, accounting and dispute-resolution needs." },
         { h: "6. Your choices", b: `You can ask us to see what personal information we hold about you, correct it, or delete your account, by emailing ${SUPPORT_EMAIL}. Deleting your account may affect bookings still in progress.` },
-        { h: "7. Local storage", b: "The app uses your browser's local storage to keep you signed in between visits; this stays on your device and isn't something we can read remotely." },
+        { h: "7. Local storage", b: "The app uses your browser's local storage to keep you signed in between visits; this stays on your device and isn't something we can read remotely. We also use cookie-free page-view statistics (no advertising, no cross-site tracking) and, if the app crashes, send an automatic error report containing the error message, the page, your browser type and the app version — never your name, email or account details." },
         { h: "8. Changes to this policy", b: "We may update this policy from time to time; the \"last updated\" date at the top will reflect the most recent change." },
         { h: "9. Contact", b: `Questions about this policy can be sent to ${SUPPORT_EMAIL}.` },
       ],
@@ -1821,7 +1833,7 @@ const LEGAL_CONTENT = {
         { h: "4. Où elles sont stockées", b: "Vos données sont stockées chez notre fournisseur de base de données et de stockage de fichiers (Supabase), avec des contrôles d'accès garantissant que les documents d'identité et les photos de véhicules ne sont accessibles qu'au compte concerné, à la contrepartie d'une réservation active, ou à un administrateur." },
         { h: "5. Durée de conservation", b: "Nous conservons les données de compte et de réservation aussi longtemps que votre compte est actif, et pendant une période raisonnable ensuite pour répondre aux besoins légaux, comptables et de résolution de litiges." },
         { h: "6. Vos choix", b: `Vous pouvez nous demander de consulter les informations personnelles que nous détenons à votre sujet, de les corriger, ou de supprimer votre compte, en écrivant à ${SUPPORT_EMAIL}. La suppression de votre compte peut affecter les réservations en cours.` },
-        { h: "7. Stockage local", b: "L'application utilise le stockage local de votre navigateur pour vous garder connecté entre les visites ; ces données restent sur votre appareil et nous ne pouvons pas les consulter à distance." },
+        { h: "7. Stockage local", b: "L'application utilise le stockage local de votre navigateur pour vous garder connecté entre les visites ; ces données restent sur votre appareil et nous ne pouvons pas les consulter à distance. Nous utilisons aussi des statistiques de visites sans cookies (ni publicité, ni suivi entre sites) et, si l'application plante, un rapport d'erreur automatique contenant le message d'erreur, la page, le type de navigateur et la version de l'application — jamais votre nom, votre e-mail ni les détails de votre compte." },
         { h: "8. Modifications de cette politique", b: "Nous pouvons mettre à jour cette politique de temps à autre ; la date de « dernière mise à jour » en haut reflétera la modification la plus récente." },
         { h: "9. Contact", b: `Pour toute question sur cette politique, écrivez à ${SUPPORT_EMAIL}.` },
       ],
@@ -2029,7 +2041,7 @@ function LegalModal({ tab, onClose }) {
 
 /* ---------------------------------- hero (ring-road motif) ---------------------------------- */
 
-function Hero({ query, setQuery }) {
+function Hero({ query, setQuery, onSearch }) {
   const { t } = useLang();
   const hubs = [
     { x: 190, y: 70, label: "Airport" },
@@ -2065,12 +2077,15 @@ function Hero({ query, setQuery }) {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") onSearch && onSearch(); }}
               placeholder={t("hero.searchPlaceholder")}
               className="bg-transparent outline-none w-full text-sm"
               style={{ ...body, color: C.sand }}
             />
           </div>
           <button
+            type="button"
+            onClick={onSearch}
             className="px-5 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5"
             style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
           >
@@ -4300,6 +4315,7 @@ function mapInvoiceRow(r) {
     periodEnd: r.period_end,
     dueDate: r.due_date,
     paidAt: r.paid_at,
+    paymentRef: r.payment_reference || "",
     status: r.status,
     commissionRate: r.commission_rate,
     supplierName: (r.suppliers && r.suppliers.business_name) || "",
@@ -4312,9 +4328,26 @@ function mapInvoiceRow(r) {
   };
 }
 
+// Selects invoices including the optional payment_reference column. If the
+// column hasn't been added to the database yet (migration not run), retry
+// without it so the invoice lists keep working.
+async function sbSelectInvoices({ select, query, accessToken }) {
+  const withRef = select.replace("paid_at,", "paid_at,payment_reference,");
+  try {
+    return await sbSelect("invoices", { select: withRef, query, accessToken });
+  } catch (e) {
+    if (/payment_reference/i.test(e.message || "")) {
+      return sbSelect("invoices", { select, query, accessToken });
+    }
+    throw e;
+  }
+}
+
 function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [payRef, setPayRef] = useState("");
   const gross = invoiceGross(inv);
   const commission = invoiceCommission(inv);
   const periodLabel = `${fmtDateShort(inv.periodStart)} – ${fmtDateShort(inv.periodEnd)}`;
@@ -4371,9 +4404,10 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
               {inv.status === "paid"
                 ? t("invoices.paidOn", { date: fmtTimestampShort(inv.paidAt) })
                 : t("invoices.dueOn", { date: fmtDateShort(inv.dueDate) })}
+              {inv.status === "paid" && inv.paymentRef ? ` · ${t("invoices.paymentRef", { ref: inv.paymentRef })}` : ""}
             </span>
-            {inv.status !== "paid" && onMarkPaid && (
-              <button onClick={() => onMarkPaid(inv.id)} disabled={marking}
+            {inv.status !== "paid" && onMarkPaid && !confirming && (
+              <button onClick={() => setConfirming(true)} disabled={marking}
                 className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
                 style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
                 {marking ? <Loader2 size={10} className="animate-spin" /> : null}
@@ -4381,6 +4415,31 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
               </button>
             )}
           </div>
+          {inv.status !== "paid" && onMarkPaid && confirming && (
+            <div className="mt-2.5 flex flex-col gap-2">
+              <input
+                value={payRef}
+                onChange={(e) => setPayRef(e.target.value)}
+                maxLength={200}
+                placeholder={t("invoices.paymentRefPlaceholder")}
+                className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+                style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }}
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => { setConfirming(false); setPayRef(""); }} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {t("invoices.cancelPaid")}
+                </button>
+                <button onClick={() => onMarkPaid(inv.id, payRef.trim())} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
+                  {marking ? <Loader2 size={10} className="animate-spin" /> : null}
+                  {t("invoices.confirmPaid")}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -4398,7 +4457,7 @@ function InvoicesSection() {
   useEffect(() => {
     if (!SUPABASE_CONFIGURED || !profile) { setLoading(false); return; }
     let cancelled = false;
-    sbSelect("invoices", {
+    sbSelectInvoices({
       select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,invoice_items(gross_amount,bookings:rental_bookings(date_from,date_to,vehicles:rental_vehicles(name),profiles(full_name)))",
       query: `&supplier_id=eq.${profile.id}&order=period_start.desc`,
       accessToken,
@@ -5373,7 +5432,7 @@ function AdminInvoices() {
   const load = () => {
     setLoading(true);
     setLoadError("");
-    sbSelect("invoices", {
+    sbSelectInvoices({
       select: "id,period_start,period_end,commission_rate,status,due_date,paid_at,suppliers(business_name),invoice_items(gross_amount,bookings:rental_bookings(date_from,date_to,vehicles:rental_vehicles(name),profiles(full_name)))",
       query: "&order=due_date.desc",
       accessToken,
@@ -5400,13 +5459,23 @@ function AdminInvoices() {
     }
   };
 
-  const markPaid = async (id) => {
+  const markPaid = async (id, reference = "") => {
     setMarkingId(id);
     const prev = invoices;
     const nowIso = new Date().toISOString();
-    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "paid", paidAt: nowIso } : i)));
+    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "paid", paidAt: nowIso, paymentRef: reference } : i)));
     try {
       await sbRpc("mark_invoice_paid", { target_id: id }, accessToken);
+      if (reference) {
+        // Separate call so marking paid never depends on the reference column
+        // existing. If it fails the invoice stays paid and we say so.
+        try {
+          await sbRpc("set_invoice_payment_reference", { target_id: id, reference }, accessToken);
+        } catch (refErr) {
+          setInvoices((cur) => cur.map((i) => (i.id === id ? { ...i, paymentRef: "" } : i)));
+          setLoadError(`${t("invoices.refSaveFailed")} ${refErr.message}`);
+        }
+      }
     } catch (e) {
       setInvoices(prev);
       setLoadError(e.message);
@@ -6690,16 +6759,23 @@ function AppInner() {
 
       {mode === "renter" ? (
         <>
-          <Hero query={query} setQuery={setQuery} />
-          <div className="max-w-5xl mx-auto px-5 md:px-10 py-8 pb-24">
+          <Hero
+            query={query}
+            setQuery={setQuery}
+            onSearch={() => {
+              const el = document.getElementById("vehicle-results");
+              if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
+          <div id="vehicle-results" className="max-w-5xl mx-auto px-5 md:px-10 py-8 pb-24" style={{ scrollMarginTop: 56 }}>
             {SUPABASE_CONFIGURED && vehiclesLoading && (
               <div className="flex items-center gap-2 mb-4" style={{ color: C.mist, opacity: 0.6 }}>
-                <Loader2 size={14} className="animate-spin" /> <span style={{ ...body, fontSize: 12.5 }}>Loading vehicles…</span>
+                <Loader2 size={14} className="animate-spin" /> <span style={{ ...body, fontSize: 12.5 }}>{t("filters.loadingVehicles")}</span>
               </div>
             )}
             {SUPABASE_CONFIGURED && vehiclesError && (
               <div className="rounded-lg px-3 py-2.5 mb-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-                <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>Couldn't load live vehicles: {vehiclesError}</span>
+                <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("filters.vehiclesLoadError")} {vehiclesError}</span>
               </div>
             )}
             <Filters type={type} setType={setType} deposit={deposit} setDeposit={setDeposit} sort={sort} setSort={setSort} view={view} setView={setView} />
