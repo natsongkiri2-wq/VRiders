@@ -465,7 +465,7 @@ const STRINGS = {
     },
     hero: {
       eyebrow: "PORT VILA · EFATE ISLAND",
-      title: "Every vehicle on the island, one search.",
+      title: "Your all-in-one vehicle rental search.",
       sub: "Compare local suppliers, see the deposit terms up front, and book — you pay the supplier directly, no middleman on your card.",
       searchPlaceholder: "Search vehicles, suppliers, or areas...",
       search: "Search",
@@ -765,7 +765,7 @@ const STRINGS = {
     },
     hero: {
       eyebrow: "PORT-VILA · ÎLE D'EFATE",
-      title: "Tous les véhicules de l'île, en une recherche.",
+      title: "Votre recherche de location de véhicules tout-en-un.",
       sub: "Comparez les loueurs locaux, voyez la caution dès le départ, et réservez — vous payez le loueur directement, sans intermédiaire sur votre carte.",
       searchPlaceholder: "Rechercher un véhicule, un loueur, une zone...",
       search: "Rechercher",
