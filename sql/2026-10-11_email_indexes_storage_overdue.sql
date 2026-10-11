@@ -1,0 +1,12 @@
+-- 2026-10-11 Follow-up fixes (already applied to the live database via two migrations:
+-- "email_escaping_indexes_storage_limits_overdue" and "send_email_never_blocks_caller").
+-- Summary:
+--  * public.html_escape() + notify_booking_change()/notify_invoice_issued() escape names,
+--    vehicle names and references, and tolerate empty names
+--  * send_email() catches errors so an email problem can never roll back a booking/invoice
+--  * is_vehicle_available() reads rental_bookings (was the legacy bookings table)
+--  * indexes on foreign keys of the marketplace tables
+--  * storage buckets: kyc-documents (10 MB, images + PDF), vehicle-photos and
+--    booking-photos (8 MB, images)
+--  * pg_cron job "mark-overdue-invoices" (daily 03:00 UTC): due -> overdue after due_date
+-- Full statements are in the Supabase migration history (supabase_migrations).

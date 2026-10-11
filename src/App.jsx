@@ -6622,10 +6622,34 @@ function MyBookings({ onResume }) {
 
 /* ---------------------------------- app ---------------------------------- */
 
+const HASH_MODES = { renter: "renter", supplier: "supplier", bookings: "mybookings", admin: "admin" };
+function modeFromHash() {
+  try {
+    const key = (window.location.hash || "").replace(/^#\/?/, "").toLowerCase();
+    return HASH_MODES[key] || null;
+  } catch (e) { return null; }
+}
+
 function AppInner() {
   const { t } = useLang();
   const { user, accessToken, passwordResetPending } = useAuth();
-  const [mode, setMode] = useState("renter");
+  // Shareable entry points: terimarides.com/#supplier, #bookings, #admin
+  // open that screen directly (sign-in rules are unchanged — these only pick
+  // which screen to show). The address bar follows the role tabs too.
+  const [mode, setModeRaw] = useState(() => modeFromHash() || "renter");
+  const setMode = (next) => {
+    setModeRaw(next);
+    try {
+      const key = Object.keys(HASH_MODES).find((k) => HASH_MODES[k] === next);
+      if (key && next !== "renter") window.history.replaceState(null, "", "#" + key);
+      else if (next === "renter" && window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch (e) { /* history unavailable — non-fatal */ }
+  };
+  useEffect(() => {
+    const onHash = () => { const m = modeFromHash(); if (m) setModeRaw(m); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [deposit, setDeposit] = useState("all");
