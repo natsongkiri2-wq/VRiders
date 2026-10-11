@@ -97,6 +97,17 @@ async function sbInsert(table, rows, accessToken) {
   }));
 }
 
+// Insert without asking for the row back — for tables whose full row the
+// caller isn't allowed to read through the API (e.g. suppliers).
+async function sbInsertMinimal(table, rows, accessToken) {
+  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  return sbHandle(await fetch(url, {
+    method: "POST",
+    headers: { ...sbHeaders(accessToken), Prefer: "return=minimal" },
+    body: JSON.stringify(rows),
+  }));
+}
+
 async function sbUpdate(table, query, patch, accessToken) {
   const url = `${SUPABASE_URL}/rest/v1/${table}?${query}`;
   return sbHandle(await fetch(url, {
@@ -1128,6 +1139,13 @@ function AuthProvider({ children }) {
   // try to restore + refresh any saved session. This safely no-ops inside the
   // Claude.ai artifact sandbox, where localStorage isn't available.
   const [session, setSession] = useState(null);
+  // Realtime subscriptions run as "anon" unless told otherwise, and booking
+  // rows are only visible to their customer/supplier — so hand the live
+  // channel the signed-in user's token to keep dashboards updating.
+  useEffect(() => {
+    if (!supabaseRealtime || !session || !session.access_token) return;
+    try { supabaseRealtime.realtime.setAuth(session.access_token); } catch (e) { /* non-fatal */ }
+  }, [session]);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [restoringSession, setRestoringSession] = useState(true);
@@ -1517,12 +1535,14 @@ function SupplierAuthProvider({ children }) {
     }
     let cancelled = false;
     setLoadingSupplier(true);
-    sbSelect("suppliers", { query: `&user_id=eq.${user.id}`, accessToken })
-      .then((rows) => {
+    // Contact/KYC columns of the suppliers table are not readable through
+    // the public API; the supplier's own full record comes from this RPC.
+    sbRpc("get_my_supplier", {}, accessToken)
+      .then((row) => {
         if (cancelled) return;
-        if (rows && rows[0]) {
-          setProfile(rows[0]);
-          setStatus(rows[0].kyc_status);
+        if (row && row.id) {
+          setProfile(row);
+          setStatus(row.kyc_status);
         }
       })
       .catch(() => {})
@@ -1559,7 +1579,7 @@ function SupplierAuthProvider({ children }) {
             console.error("Vehicle document upload failed:", e.message);
           }
         }
-        const rows = await sbInsert("suppliers", [{
+        await sbInsertMinimal("suppliers", [{
           user_id: user.id,
           business_name: data.businessName,
           business_type: data.businessType,
@@ -1573,8 +1593,9 @@ function SupplierAuthProvider({ children }) {
           ...(idDocPath ? { id_doc_url: idDocPath } : {}),
           ...(vehicleDocPath ? { vehicle_doc_url: vehicleDocPath } : {}),
         }], accessToken);
-        setProfile(rows[0]);
-        setStatus(rows[0].kyc_status);
+        const created = await sbRpc("get_my_supplier", {}, accessToken);
+        setProfile(created);
+        setStatus(created.kyc_status);
       } catch (e) {
         setApplyError(e.message);
         throw e;
@@ -1883,10 +1904,10 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
   const { t } = useLang();
   const { user, signOut, restoringSession } = useAuth();
   return (
-    <div className="flex items-center justify-between px-5 md:px-10 py-4 sticky top-0 z-30" style={{ backgroundColor: C.void, borderBottom: `1px solid ${C.line}` }}>
-      <div className="flex items-center gap-2.5">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 md:px-10 py-3 md:py-4 sticky top-0 z-30" style={{ backgroundColor: C.void, borderBottom: `1px solid ${C.line}` }}>
+      <div className="flex items-center gap-2.5 mr-auto min-w-0">
         <TerimaMark size={32} />
-        <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em" }}>Terima Rides</span>
+        <span className="whitespace-nowrap" style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 19, letterSpacing: "-0.01em" }}>Terima Rides</span>
         {mode === "renter" && idVerified && (
           <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full ml-1" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
             <BadgeCheck size={11} color={C.lagoon} />
@@ -1894,19 +1915,21 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <LanguageSwitcher />
-        <div className="flex items-center gap-1 p-1 rounded-full" style={{ backgroundColor: C.panel }}>
+      <LanguageSwitcher />
+      {/* On phones the role tabs drop to their own full-width row so the
+          Sign in button stays on screen; from md up it sits inline. */}
+      <div className="order-last basis-full md:order-none md:basis-auto flex justify-center">
+        <div className="flex items-center gap-1 p-1 rounded-full max-w-full overflow-x-auto whitespace-nowrap" style={{ backgroundColor: C.panel }}>
           <button
             onClick={() => setMode("renter")}
-            className="px-4 py-1.5 rounded-full text-sm"
+            className="px-3 md:px-4 py-1.5 rounded-full text-sm"
             style={{ ...body, fontWeight: 500, backgroundColor: mode === "renter" ? C.lagoon : "transparent", color: mode === "renter" ? "#fff" : C.mist }}
           >
             {t("header.renter")}
           </button>
           <button
             onClick={() => setMode("supplier")}
-            className="px-4 py-1.5 rounded-full text-sm"
+            className="px-3 md:px-4 py-1.5 rounded-full text-sm"
             style={{ ...body, fontWeight: 500, backgroundColor: mode === "supplier" ? C.lagoon : "transparent", color: mode === "supplier" ? "#fff" : C.mist }}
           >
             {t("header.supplier")}
@@ -1914,7 +1937,7 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
           {user && (
             <button
               onClick={() => setMode("mybookings")}
-              className="px-4 py-1.5 rounded-full text-sm"
+              className="px-3 md:px-4 py-1.5 rounded-full text-sm"
               style={{ ...body, fontWeight: 500, backgroundColor: mode === "mybookings" ? C.lagoon : "transparent", color: mode === "mybookings" ? "#fff" : C.mist }}
             >
               {t("header.myBookings")}
@@ -1923,13 +1946,14 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
           {user && ADMIN_USER_IDS.includes(user.id) && (
             <button
               onClick={() => setMode("admin")}
-              className="px-4 py-1.5 rounded-full text-sm"
+              className="px-3 md:px-4 py-1.5 rounded-full text-sm"
               style={{ ...body, fontWeight: 500, backgroundColor: mode === "admin" ? C.coral : "transparent", color: mode === "admin" ? "#fff" : C.mist }}
             >
               {t("admin.nav")}
             </button>
           )}
         </div>
+      </div>
         {restoringSession ? (
           <div className="w-16 h-7 rounded-full" style={{ backgroundColor: C.panel }} />
         ) : user ? (
@@ -1941,7 +1965,6 @@ function Header({ mode, setMode, idVerified, onOpenAuth }) {
             {t("auth.signIn")}
           </button>
         )}
-      </div>
     </div>
   );
 }
@@ -2960,7 +2983,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
   useEffect(() => {
     if (!SUPABASE_CONFIGURED || resumeBooking) return;
     let cancelled = false;
-    sbSelect("rental_bookings", { select: "date_from,date_to", query: `&vehicle_id=eq.${v.id}&status=in.(pending,accepted)` })
+    sbRpc("vehicle_booked_ranges", { p_vehicle_id: v.id })
       .then((rows) => {
         if (cancelled) return;
         setVehicleBookings(rows.map((r) => ({ vehicleId: v.id, from: r.date_from, to: r.date_to })));
