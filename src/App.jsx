@@ -647,7 +647,9 @@ const STRINGS = {
       paidOn: "Paid {date}", dueOn: "Due {date}",
       waivedOn: "Waived {date}", waiveReason: "Reason: {reason}",
       waiveButton: "Waive", confirmWaive: "Confirm waive", undoWaive: "Undo waive",
-      waiveReasonPlaceholder: "Reason (e.g. pilot offer: 2 months free)",
+      waiveReasonPlaceholder: "Reason (required), e.g. pilot offer: 2 months free",
+      undoPayment: "Undo payment", confirmUndoPayment: "Confirm undo",
+      undoPaymentQuestion: "Mark this invoice as unpaid again? The paid date and reference will be cleared.",
       paymentRef: "Ref: {ref}",
       paymentRefPlaceholder: "Payment reference or note (optional)",
       confirmPaid: "Confirm paid", cancelPaid: "Cancel",
@@ -949,7 +951,9 @@ const STRINGS = {
       statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard", statusWaived: "Exonérée",
       waivedOn: "Exonérée le {date}", waiveReason: "Motif : {reason}",
       waiveButton: "Exonérer", confirmWaive: "Confirmer l'exonération", undoWaive: "Annuler l'exonération",
-      waiveReasonPlaceholder: "Motif (ex. offre pilote : 2 mois gratuits)",
+      waiveReasonPlaceholder: "Motif (obligatoire), ex. offre pilote : 2 mois gratuits",
+      undoPayment: "Annuler le paiement", confirmUndoPayment: "Confirmer l'annulation",
+      undoPaymentQuestion: "Remettre cette facture à payer ? La date de paiement et la référence seront effacées.",
       paidOn: "Payée le {date}", dueOn: "Échéance {date}",
       paymentRef: "Réf. : {ref}",
       paymentRefPlaceholder: "Référence ou note de paiement (facultatif)",
@@ -4374,10 +4378,10 @@ async function sbSelectInvoices({ select, query, accessToken }) {
   }
 }
 
-function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, marking, showSupplier }) {
+function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, onUnpay, marking, showSupplier }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
-  // null | "paid" | "waive": which confirmation panel is showing
+  // null | "paid" | "waive" | "unpay": which confirmation panel is showing
   const [confirming, setConfirming] = useState(null);
   const [payRef, setPayRef] = useState("");
   const waived = inv.status === "waived";
@@ -4467,9 +4471,34 @@ function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, marking, showSupplier
                   {t("invoices.undoWaive")}
                 </button>
               )}
+              {inv.status === "paid" && onUnpay && !confirming && (
+                <button onClick={() => setConfirming("unpay")} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {t("invoices.undoPayment")}
+                </button>
+              )}
             </div>
           </div>
-          {!closed && confirming && (onMarkPaid || onWaive) && (
+          {inv.status === "paid" && confirming === "unpay" && onUnpay && (
+            <div className="mt-2.5 flex flex-col gap-2">
+              <p style={{ ...body, fontSize: 11.5, color: C.mist, lineHeight: 1.5 }}>{t("invoices.undoPaymentQuestion")}</p>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setConfirming(null)} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {t("invoices.cancelPaid")}
+                </button>
+                <button onClick={() => { onUnpay(inv.id); setConfirming(null); }} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>
+                  {marking ? <Loader2 size={10} className="animate-spin" /> : null}
+                  {t("invoices.confirmUndoPayment")}
+                </button>
+              </div>
+            </div>
+          )}
+          {!closed && confirming && confirming !== "unpay" && (onMarkPaid || onWaive) && (
             <div className="mt-2.5 flex flex-col gap-2">
               <input
                 value={payRef}
@@ -4485,7 +4514,8 @@ function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, marking, showSupplier
                   style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
                   {t("invoices.cancelPaid")}
                 </button>
-                <button onClick={() => (confirming === "waive" ? onWaive(inv.id, payRef.trim()) : onMarkPaid(inv.id, payRef.trim()))} disabled={marking}
+                <button onClick={() => (confirming === "waive" ? onWaive(inv.id, payRef.trim()) : onMarkPaid(inv.id, payRef.trim()))}
+                  disabled={marking || (confirming === "waive" && !payRef.trim())}
                   className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
                   style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
                   {marking ? <Loader2 size={10} className="animate-spin" /> : null}
@@ -5563,6 +5593,20 @@ function AdminInvoices() {
     }
   };
 
+  const unpay = async (id) => {
+    setMarkingId(id);
+    const prev = invoices;
+    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "due", paidAt: null, paymentRef: "" } : i)));
+    try {
+      await sbRpc("unmark_invoice_paid", { target_id: id }, accessToken);
+    } catch (e) {
+      setInvoices(prev);
+      setLoadError(e.message);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
   const unwaive = async (id) => {
     setMarkingId(id);
     const prev = invoices;
@@ -5609,7 +5653,7 @@ function AdminInvoices() {
       ) : (
         <div className="flex flex-col gap-3 mt-5">
           {invoices.map((inv) => (
-            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} marking={markingId === inv.id} showSupplier />
+            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} onUnpay={unpay} marking={markingId === inv.id} showSupplier />
           ))}
         </div>
       )}
