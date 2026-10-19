@@ -79,7 +79,19 @@ export function datesInText(text) {
   return out;
 }
 
-export function matchLicence(text, typed) {
+// Dates printed on lines that talk about expiry/validity (the printed expiry, not birth or issue dates).
+export function expiryDatesOnPhoto(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const out = new Set();
+  lines.forEach((line, i) => {
+    if (/exp|valid|until|jusqu|\b4b\b/i.test(line)) {
+      datesInText(line + " " + (lines[i + 1] || "")).forEach((d) => out.add(d));
+    }
+  });
+  return [...out].sort();
+}
+
+export function matchLicence(text, typed, today = new Date().toLocaleDateString("en-CA")) {
   const compact = String(text || "").replace(/\s/g, "");
   if (compact.length < 20) return { ok: false, codes: ["unreadable"] };
   const name = nameMatches(text, typed.fullName);
@@ -90,8 +102,15 @@ export function matchLicence(text, typed) {
   const codes = [];
   if (!name) codes.push("name_mismatch");
   if (!number) codes.push("number_mismatch");
-  if (!expiry) codes.push("expiry_mismatch");
-  return { ok: false, codes };
+  let expiredOn = null;
+  if (!expiry) {
+    const printed = expiryDatesOnPhoto(text);
+    if (printed.length && printed[printed.length - 1] < today) {
+      codes.push("photo_expired");
+      expiredOn = printed[printed.length - 1];
+    } else codes.push("expiry_mismatch");
+  }
+  return { ok: false, codes, expiredOn };
 }
 
 // Grayscale + upscale + contrast stretch: helps OCR on ordinary phone photos.

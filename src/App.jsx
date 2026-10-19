@@ -590,6 +590,7 @@ const STRINGS = {
       checkName: "The name on the licence doesn't match the name you typed.",
       checkNumber: "The licence number on the photo doesn't match the number you typed.",
       checkExpiry: "The expiry date on the photo doesn't match the date you typed.",
+      checkPhotoExpired: "This licence has EXPIRED (expiry {date}). You can't book with an expired licence. Please upload a current licence.",
       checkUnavailable: "We couldn't check the photo just now. Please try again, or retake it flat and in good light.",
       checkRateLimited: "Too many attempts. Please wait an hour and try again.",
       checkUploadFailed: "We couldn't upload your photo. Check your connection and try again.",
@@ -927,6 +928,7 @@ const STRINGS = {
       checkName: "Le nom sur le permis ne correspond pas au nom saisi.",
       checkNumber: "Le numéro sur la photo ne correspond pas au numéro saisi.",
       checkExpiry: "La date d'expiration sur la photo ne correspond pas à la date saisie.",
+      checkPhotoExpired: "Ce permis est EXPIRÉ (expiration {date}). Vous ne pouvez pas réserver avec un permis expiré. Envoyez un permis en cours de validité.",
       checkUnavailable: "Impossible de vérifier la photo pour le moment. Réessayez, ou reprenez-la à plat et bien éclairée.",
       checkRateLimited: "Trop de tentatives. Réessayez dans une heure.",
       checkUploadFailed: "Impossible d'envoyer votre photo. Vérifiez votre connexion et réessayez.",
@@ -3877,7 +3879,8 @@ function IDVerificationModal({ onClose, onVerified }) {
       else {
         if (codes.includes("name_mismatch")) msgs.push(t("id.checkName"));
         if (codes.includes("number_mismatch")) msgs.push(t("id.checkNumber"));
-        if (codes.includes("expiry_mismatch")) msgs.push(t("id.checkExpiry"));
+        if (codes.includes("photo_expired")) msgs.unshift(t("id.checkPhotoExpired", { date: fmtDateShort(verdict.expiredOn) }));
+        else if (codes.includes("expiry_mismatch")) msgs.push(t("id.checkExpiry"));
       }
       return fail(msgs.join(" "));
     }
@@ -3994,8 +3997,8 @@ function IDVerificationModal({ onClose, onVerified }) {
               </div>
 
               {error && (
-                <div className="rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-                  <span style={{ ...body, fontSize: 11.5, color: C.hibiscus }}>{error}</span>
+                <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                  <span style={{ ...body, fontSize: 13, fontWeight: 700, color: "#FFE3EB", lineHeight: 1.45 }}>{error}</span>
                 </div>
               )}
 
