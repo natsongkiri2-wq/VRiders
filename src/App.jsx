@@ -582,8 +582,16 @@ const STRINGS = {
       idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — suppliers may ask to see it alongside your license at pickup.",
       photoLabel: "Photo of your license", tapUpload: "Tap to capture or upload",
       verifyBtn: "Verify my license",
-      privacy: "Kept on file with your account. The supplier you send a booking request to can see these details and the photo for that booking only.",
-      checking: "Checking your details...",
+      privacy: "Your photo is read automatically and checked against what you typed. It is kept on file with your account, and the supplier you send a booking request to can see these details and the photo for that booking only.",
+      checking: "Checking your licence photo against your details...",
+      checkNotLicence: "That photo doesn't look like a driving licence. Upload a clear photo of the licence itself.",
+      checkUnreadable: "We couldn't read the licence in that photo. Retake it flat, in good light, with all four corners visible.",
+      checkName: "The name on the licence doesn't match the name you typed.",
+      checkNumber: "The licence number on the photo doesn't match the number you typed.",
+      checkExpiry: "The expiry date on the photo doesn't match the date you typed.",
+      checkUnavailable: "The licence check isn't available right now. Please try again in a few minutes.",
+      checkRateLimited: "Too many attempts. Please wait an hour and try again.",
+      checkUploadFailed: "We couldn't upload your photo. Check your connection and try again.",
       verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
@@ -911,8 +919,16 @@ const STRINGS = {
       idpNote: "Comme ce permis n'a pas été délivré au Vanuatu, apportez aussi votre Permis de Conduire International (PCI) — les loueurs peuvent le demander au départ.",
       photoLabel: "Photo de votre permis", tapUpload: "Toucher pour photographier ou importer",
       verifyBtn: "Vérifier mon permis",
-      privacy: "Conservée avec votre compte. Le loueur à qui vous envoyez une demande peut voir ces informations et la photo, pour cette réservation uniquement.",
-      checking: "Vérification en cours...",
+      privacy: "Votre photo est lue automatiquement et comparée à ce que vous avez saisi. Elle est conservée avec votre compte, et le loueur à qui vous envoyez une demande peut voir ces informations et la photo, pour cette réservation uniquement.",
+      checking: "Comparaison de la photo du permis avec vos informations...",
+      checkNotLicence: "Cette photo ne ressemble pas à un permis de conduire. Envoyez une photo nette du permis lui-même.",
+      checkUnreadable: "Impossible de lire le permis sur cette photo. Reprenez-la à plat, bien éclairée, avec les quatre coins visibles.",
+      checkName: "Le nom sur le permis ne correspond pas au nom saisi.",
+      checkNumber: "Le numéro sur la photo ne correspond pas au numéro saisi.",
+      checkExpiry: "La date d'expiration sur la photo ne correspond pas à la date saisie.",
+      checkUnavailable: "Le contrôle du permis n'est pas disponible pour le moment. Réessayez dans quelques minutes.",
+      checkRateLimited: "Trop de tentatives. Réessayez dans une heure.",
+      checkUploadFailed: "Impossible d'envoyer votre photo. Vérifiez votre connexion et réessayez.",
       verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
@@ -3836,40 +3852,54 @@ function IDVerificationModal({ onClose, onVerified }) {
     }
     setError("");
     setStage("checking");
-    // This is a real submission now — everything the customer enters is
-    // saved to their profile and id_verified is genuinely set true. What
-    // this does NOT do is check the license against any government or
-    // third-party registry; it's a self-attested record, the same way the
-    // supplier KYC flow works. See id.subtitle for the disclosure.
-    if (SUPABASE_CONFIGURED && user) {
-      let licensePhotoPath = null;
-      if (form.photoFile) {
-        try {
-          const ext = (form.photoFile.name.split(".").pop() || "jpg").toLowerCase();
-          const path = `${user.id}/license.${ext}`;
-          await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, form.photoFile, accessToken);
-          licensePhotoPath = path;
-        } catch (e) {
-          // Don't block verification on a photo upload hiccup — the rest
-          // of the record is still worth saving.
-          console.error("License photo upload failed:", e.message);
-        }
-      }
-      try {
-        await sbUpdate("profiles", `id=eq.${user.id}`, {
-          full_name: form.fullName.trim(),
-          phone: form.phone.trim(),
-          license_number: form.licenseNumber.trim(),
-          license_country: form.country,
-          license_expiry: form.expiry,
-          ...(licensePhotoPath ? { license_photo_url: licensePhotoPath } : {}),
-          id_verified: true,
-        }, accessToken);
-      } catch (e) {
-        console.error("Saving verification failed:", e.message);
-      }
+    // The verify-licence edge function reads the photo with AI, compares it to
+    // what was typed, and only on a full match saves the licence and sets
+    // id_verified. It still does not check any government register.
+    if (!SUPABASE_CONFIGURED || !user) {
+      setTimeout(() => setStage("done"), 600);
+      return;
     }
-    setTimeout(() => setStage("done"), 1400);
+    const fail = (msg) => { setError(msg); setStage("form"); };
+    const mime = (form.photoFile && form.photoFile.type) || "image/jpeg";
+    const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+    const photoPath = `${user.id}/pending-license.${ext}`;
+    try {
+      await sbUploadFile(KYC_DOCUMENTS_BUCKET, photoPath, form.photoFile, accessToken);
+    } catch (e) {
+      console.error("License photo upload failed:", e.message);
+      return fail(t("id.checkUploadFailed"));
+    }
+    let result;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-licence`, {
+        method: "POST",
+        headers: sbHeaders(accessToken),
+        body: JSON.stringify({
+          full_name: form.fullName.trim(), phone: form.phone.trim(), license_number: form.licenseNumber.trim(),
+          country: form.country, expiry: form.expiry, photo_path: photoPath,
+        }),
+      });
+      result = await res.json().catch(() => ({}));
+      if (res.status === 429) return fail(t("id.checkRateLimited"));
+    } catch (e) {
+      console.error("Licence check failed:", e.message);
+      return fail(t("id.checkUnavailable"));
+    }
+    if (result && result.ok) {
+      setStage("done");
+      return;
+    }
+    const codes = (result && result.codes) || (result && result.code ? [result.code] : []);
+    const msgs = [];
+    if (codes.includes("not_a_licence")) msgs.push(t("id.checkNotLicence"));
+    else if (codes.includes("unreadable")) msgs.push(t("id.checkUnreadable"));
+    else {
+      if (codes.includes("name_mismatch")) msgs.push(t("id.checkName"));
+      if (codes.includes("number_mismatch")) msgs.push(t("id.checkNumber"));
+      if (codes.includes("expiry_mismatch")) msgs.push(t("id.checkExpiry"));
+      if (codes.includes("expired")) msgs.push(t("id.expiredError"));
+    }
+    fail(msgs.length ? msgs.join(" ") : t("id.checkUnavailable"));
   };
 
   return (
