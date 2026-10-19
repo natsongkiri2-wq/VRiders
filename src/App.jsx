@@ -643,8 +643,11 @@ const STRINGS = {
       heading: "Commission & invoices",
       outstanding: "Outstanding balance", nextDue: "Next due",
       colPeriod: "Period", colBookings: "Bookings", colGross: "Gross bookings", colCommission: "Commission (8%)", colStatus: "Status",
-      statusPaid: "Paid", statusDue: "Due", statusOverdue: "Overdue",
+      statusPaid: "Paid", statusDue: "Due", statusOverdue: "Overdue", statusWaived: "Waived",
       paidOn: "Paid {date}", dueOn: "Due {date}",
+      waivedOn: "Waived {date}", waiveReason: "Reason: {reason}",
+      waiveButton: "Waive", confirmWaive: "Confirm waive", undoWaive: "Undo waive",
+      waiveReasonPlaceholder: "Reason (e.g. pilot offer: 2 months free)",
       paymentRef: "Ref: {ref}",
       paymentRefPlaceholder: "Payment reference or note (optional)",
       confirmPaid: "Confirm paid", cancelPaid: "Cancel",
@@ -943,7 +946,10 @@ const STRINGS = {
       heading: "Commission et factures",
       outstanding: "Solde dû", nextDue: "Prochaine échéance",
       colPeriod: "Période", colBookings: "Réservations", colGross: "Réservations brutes", colCommission: "Commission (8%)", colStatus: "Statut",
-      statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard",
+      statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard", statusWaived: "Exonérée",
+      waivedOn: "Exonérée le {date}", waiveReason: "Motif : {reason}",
+      waiveButton: "Exonérer", confirmWaive: "Confirmer l'exonération", undoWaive: "Annuler l'exonération",
+      waiveReasonPlaceholder: "Motif (ex. offre pilote : 2 mois gratuits)",
       paidOn: "Payée le {date}", dueOn: "Échéance {date}",
       paymentRef: "Réf. : {ref}",
       paymentRefPlaceholder: "Référence ou note de paiement (facultatif)",
@@ -4339,6 +4345,8 @@ function mapInvoiceRow(r) {
     dueDate: r.due_date,
     paidAt: r.paid_at,
     paymentRef: r.payment_reference || "",
+    waivedAt: r.waived_at || null,
+    waiveReason: r.waive_reason || "",
     status: r.status,
     commissionRate: r.commission_rate,
     supplierName: (r.suppliers && r.suppliers.business_name) || "",
@@ -4351,34 +4359,37 @@ function mapInvoiceRow(r) {
   };
 }
 
-// Selects invoices including the optional payment_reference column. If the
-// column hasn't been added to the database yet (migration not run), retry
-// without it so the invoice lists keep working.
+// Selects invoices including the optional payment_reference, waived_at and
+// waive_reason columns. If they haven't been added to the database yet
+// (migration not run), retry without them so the invoice lists keep working.
 async function sbSelectInvoices({ select, query, accessToken }) {
-  const withRef = select.replace("paid_at,", "paid_at,payment_reference,");
+  const withRef = select.replace("paid_at,", "paid_at,payment_reference,waived_at,waive_reason,");
   try {
     return await sbSelect("invoices", { select: withRef, query, accessToken });
   } catch (e) {
-    if (/payment_reference/i.test(e.message || "")) {
+    if (/payment_reference|waived_at|waive_reason/i.test(e.message || "")) {
       return sbSelect("invoices", { select, query, accessToken });
     }
     throw e;
   }
 }
 
-function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
+function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, marking, showSupplier }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  // null | "paid" | "waive": which confirmation panel is showing
+  const [confirming, setConfirming] = useState(null);
   const [payRef, setPayRef] = useState("");
+  const waived = inv.status === "waived";
+  const closed = inv.status === "paid" || waived;
   const gross = invoiceGross(inv);
   const commission = invoiceCommission(inv);
   const periodLabel = `${fmtDateShort(inv.periodStart)} – ${fmtDateShort(inv.periodEnd)}`;
-  const overdue = inv.status !== "paid" && inv.dueDate && inv.dueDate < daysFromNow(0);
+  const overdue = !closed && inv.dueDate && inv.dueDate < daysFromNow(0);
 
-  const statusColor = inv.status === "paid" ? C.lagoon : overdue ? C.hibiscus : C.coralSoft;
-  const statusBg = inv.status === "paid" ? "rgba(46,158,134,0.18)" : overdue ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)";
-  const statusLabel = inv.status === "paid" ? t("invoices.statusPaid") : overdue ? t("invoices.statusOverdue") : t("invoices.statusDue");
+  const statusColor = waived ? C.mist : inv.status === "paid" ? C.lagoon : overdue ? C.hibiscus : C.coralSoft;
+  const statusBg = waived ? "rgba(255,255,255,0.08)" : inv.status === "paid" ? "rgba(46,158,134,0.18)" : overdue ? "rgba(217,82,122,0.18)" : "rgba(229,106,62,0.18)";
+  const statusLabel = waived ? t("invoices.statusWaived") : inv.status === "paid" ? t("invoices.statusPaid") : overdue ? t("invoices.statusOverdue") : t("invoices.statusDue");
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: C.panel, border: `1px solid ${overdue ? C.hibiscus : C.line}` }}>
@@ -4394,7 +4405,7 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div style={{ ...mono, fontSize: 15, color: C.sand }}>{fmtVUV(commission)} VUV</div>
+            <div style={{ ...mono, fontSize: 15, color: C.sand, textDecoration: waived ? "line-through" : "none", opacity: waived ? 0.55 : 1 }}>{fmtVUV(commission)} VUV</div>
             <span className="px-2 py-0.5 rounded-full text-[9px] inline-block mt-1" style={{ ...body, fontWeight: 600, backgroundColor: statusBg, color: statusColor }}>
               {statusLabel}
             </span>
@@ -4424,41 +4435,61 @@ function InvoiceRow({ inv, onMarkPaid, marking, showSupplier }) {
 
           <div className="flex items-center justify-between mt-2.5">
             <span style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6 }}>
-              {inv.status === "paid"
-                ? t("invoices.paidOn", { date: fmtTimestampShort(inv.paidAt) })
-                : t("invoices.dueOn", { date: fmtDateShort(inv.dueDate) })}
+              {waived
+                ? t("invoices.waivedOn", { date: fmtTimestampShort(inv.waivedAt) })
+                : inv.status === "paid"
+                  ? t("invoices.paidOn", { date: fmtTimestampShort(inv.paidAt) })
+                  : t("invoices.dueOn", { date: fmtDateShort(inv.dueDate) })}
               {inv.status === "paid" && inv.paymentRef ? ` · ${t("invoices.paymentRef", { ref: inv.paymentRef })}` : ""}
+              {waived && inv.waiveReason ? ` · ${t("invoices.waiveReason", { reason: inv.waiveReason })}` : ""}
             </span>
-            {inv.status !== "paid" && onMarkPaid && !confirming && (
-              <button onClick={() => setConfirming(true)} disabled={marking}
-                className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
-                style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
-                {marking ? <Loader2 size={10} className="animate-spin" /> : null}
-                {t("admin.markPaid")}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {!closed && onWaive && !confirming && (
+                <button onClick={() => { setPayRef(""); setConfirming("waive"); }} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {t("invoices.waiveButton")}
+                </button>
+              )}
+              {!closed && onMarkPaid && !confirming && (
+                <button onClick={() => { setPayRef(""); setConfirming("paid"); }} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {marking ? <Loader2 size={10} className="animate-spin" /> : null}
+                  {t("admin.markPaid")}
+                </button>
+              )}
+              {waived && onUnwaive && (
+                <button onClick={() => onUnwaive(inv.id)} disabled={marking}
+                  className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
+                  style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                  {marking ? <Loader2 size={10} className="animate-spin" /> : null}
+                  {t("invoices.undoWaive")}
+                </button>
+              )}
+            </div>
           </div>
-          {inv.status !== "paid" && onMarkPaid && confirming && (
+          {!closed && confirming && (onMarkPaid || onWaive) && (
             <div className="mt-2.5 flex flex-col gap-2">
               <input
                 value={payRef}
                 onChange={(e) => setPayRef(e.target.value)}
                 maxLength={200}
-                placeholder={t("invoices.paymentRefPlaceholder")}
+                placeholder={confirming === "waive" ? t("invoices.waiveReasonPlaceholder") : t("invoices.paymentRefPlaceholder")}
                 className="w-full rounded-lg px-3 py-2 text-xs outline-none"
                 style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }}
               />
               <div className="flex items-center gap-2 justify-end">
-                <button onClick={() => { setConfirming(false); setPayRef(""); }} disabled={marking}
+                <button onClick={() => { setConfirming(null); setPayRef(""); }} disabled={marking}
                   className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
                   style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
                   {t("invoices.cancelPaid")}
                 </button>
-                <button onClick={() => onMarkPaid(inv.id, payRef.trim())} disabled={marking}
+                <button onClick={() => (confirming === "waive" ? onWaive(inv.id, payRef.trim()) : onMarkPaid(inv.id, payRef.trim()))} disabled={marking}
                   className="px-2.5 py-1 rounded-full text-[10px] flex items-center gap-1 disabled:opacity-50"
                   style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
                   {marking ? <Loader2 size={10} className="animate-spin" /> : null}
-                  {t("invoices.confirmPaid")}
+                  {confirming === "waive" ? t("invoices.confirmWaive") : t("invoices.confirmPaid")}
                 </button>
               </div>
             </div>
@@ -4494,8 +4525,9 @@ function InvoicesSection() {
     return () => { cancelled = true; };
   }, [profile, accessToken]);
 
-  const outstanding = invoices.filter((i) => i.status !== "paid").reduce((s, i) => s + invoiceCommission(i), 0);
-  const nextDue = invoices.find((i) => i.status !== "paid");
+  const isOpen = (i) => i.status !== "paid" && i.status !== "waived";
+  const outstanding = invoices.filter(isOpen).reduce((s, i) => s + invoiceCommission(i), 0);
+  const nextDue = invoices.find(isOpen);
 
   return (
     <div className="mt-8">
@@ -5507,6 +5539,35 @@ function AdminInvoices() {
     }
   };
 
+  const waive = async (id, reason = "") => {
+    setMarkingId(id);
+    const prev = invoices;
+    const nowIso = new Date().toISOString();
+    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "waived", waivedAt: nowIso, waiveReason: reason } : i)));
+    try {
+      await sbRpc("waive_invoice", { target_id: id, reason: reason || null }, accessToken);
+    } catch (e) {
+      setInvoices(prev);
+      setLoadError(e.message);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const unwaive = async (id) => {
+    setMarkingId(id);
+    const prev = invoices;
+    setInvoices(invoices.map((i) => (i.id === id ? { ...i, status: "due", waivedAt: null, waiveReason: "" } : i)));
+    try {
+      await sbRpc("unwaive_invoice", { target_id: id }, accessToken);
+    } catch (e) {
+      setInvoices(prev);
+      setLoadError(e.message);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
   return (
     <div className="mt-5">
       <button onClick={handleGenerate} disabled={generating}
@@ -5539,7 +5600,7 @@ function AdminInvoices() {
       ) : (
         <div className="flex flex-col gap-3 mt-5">
           {invoices.map((inv) => (
-            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} marking={markingId === inv.id} showSupplier />
+            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} marking={markingId === inv.id} showSupplier />
           ))}
         </div>
       )}
