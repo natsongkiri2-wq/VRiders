@@ -5114,7 +5114,7 @@ function SupplierGate({ onOpenAuth }) {
 
 function AdminDashboard() {
   const { t } = useLang();
-  const { accessToken } = useAuth();
+  const { accessToken, restoringSession } = useAuth();
   const [tab, setTab] = useState("suppliers");
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5154,7 +5154,16 @@ function AdminDashboard() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  // Wait for the saved session to be restored before asking for the pending
+  // list. Opening terimarides.com/#admin (or reloading while on the Admin tab)
+  // mounts this screen before the token is back; calling then went out as
+  // "anon" and failed with "permission denied for function
+  // list_pending_suppliers", and never retried once the token arrived.
+  const hasToken = !!accessToken;
+  useEffect(() => {
+    if (hasToken) load();
+    else if (!restoringSession) setLoading(false);
+  }, [hasToken, restoringSession]);
 
   const act = async (id, kind) => {
     setBusyId(id);
