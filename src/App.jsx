@@ -420,7 +420,7 @@ const LANGS = [
 
 const STRINGS = {
   en: {
-    header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "ID verified", myBookings: "My bookings" },
+    header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "Licence on file", myBookings: "My bookings" },
     mybookings: {
       heading: "My bookings", subheading: "Everything you've requested, in one place.",
       empty: "No bookings yet — go find a vehicle.", browseBtn: "Browse vehicles",
@@ -748,7 +748,7 @@ const STRINGS = {
   },
 
   fr: {
-    header: { renter: "Je loue", supplier: "Je suis loueur", verified: "Identité vérifiée", myBookings: "Mes réservations" },
+    header: { renter: "Je loue", supplier: "Je suis loueur", verified: "Permis enregistré", myBookings: "Mes réservations" },
     mybookings: {
       heading: "Mes réservations", subheading: "Tout ce que vous avez demandé, au même endroit.",
       empty: "Aucune réservation pour l'instant — trouvez un véhicule.", browseBtn: "Voir les véhicules",
