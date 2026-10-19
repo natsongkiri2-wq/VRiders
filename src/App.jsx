@@ -680,6 +680,11 @@ const STRINGS = {
       statusPaid: "Paid", statusDue: "Due", statusOverdue: "Overdue", statusWaived: "Waived",
       paidOn: "Paid {date}", dueOn: "Due {date}",
       waivedOn: "Waived {date}", waiveReason: "Reason: {reason}",
+      printBtn: "Print / Save as PDF", printInvoice: "INVOICE", printNumber: "Invoice no.", printSupplier: "Billed to", printFrom: "From",
+      printPeriod: "Period", printDue: "Due date", printStatus: "Status", printRate: "Commission rate", printGross: "Gross bookings",
+      printAmountDue: "Commission due", printNoLines: "No booking details available for this invoice.",
+      printPayNote: "Commission is charged on completed bookings only. To pay, or for payment details, contact bookings@terimarides.com or WhatsApp +678 711 6413 and quote the invoice number.",
+      printPopupBlocked: "Allow pop-ups for this site to print the invoice.",
       waiveButton: "Waive", confirmWaive: "Confirm waive", undoWaive: "Undo waive",
       waiveReasonPlaceholder: "Reason (required), e.g. pilot offer: 2 months free",
       undoPayment: "Undo payment", confirmUndoPayment: "Confirm undo",
@@ -1017,6 +1022,11 @@ const STRINGS = {
       colPeriod: "Période", colBookings: "Réservations", colGross: "Réservations brutes", colCommission: "Commission (8%)", colStatus: "Statut",
       statusPaid: "Payée", statusDue: "À payer", statusOverdue: "En retard", statusWaived: "Exonérée",
       waivedOn: "Exonérée le {date}", waiveReason: "Motif : {reason}",
+      printBtn: "Imprimer / Enregistrer en PDF", printInvoice: "FACTURE", printNumber: "Facture n°", printSupplier: "Facturé à", printFrom: "De",
+      printPeriod: "Période", printDue: "Échéance", printStatus: "Statut", printRate: "Taux de commission", printGross: "Réservations (brut)",
+      printAmountDue: "Commission due", printNoLines: "Aucun détail de réservation disponible pour cette facture.",
+      printPayNote: "La commission est facturée uniquement sur les réservations terminées. Pour payer, ou pour les coordonnées de paiement, écrivez à bookings@terimarides.com ou par WhatsApp au +678 711 6413 en indiquant le numéro de facture.",
+      printPopupBlocked: "Autorisez les pop-ups pour ce site afin d'imprimer la facture.",
       waiveButton: "Exonérer", confirmWaive: "Confirmer l'exonération", undoWaive: "Annuler l'exonération",
       waiveReasonPlaceholder: "Motif (obligatoire), ex. offre pilote : 2 mois gratuits",
       undoPayment: "Annuler le paiement", confirmUndoPayment: "Confirmer l'annulation",
@@ -4647,7 +4657,58 @@ async function sbSelectInvoices({ select, query, accessToken }) {
   }
 }
 
-function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, onUnpay, marking, showSupplier }) {
+// Opens a clean, white, A4-friendly invoice in a new window and prints it
+// (the browser's print dialog also offers "Save as PDF").
+function printInvoice(inv, t, supplierName) {
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const rate = inv.commissionRate ?? COMMISSION_RATE;
+  const gross = invoiceGross(inv);
+  const commission = invoiceCommission(inv);
+  const waived = inv.status === "waived";
+  const overdue = inv.status !== "paid" && !waived && inv.dueDate && inv.dueDate < daysFromNow(0);
+  const statusLabel = waived ? t("invoices.statusWaived") : inv.status === "paid" ? t("invoices.statusPaid") : overdue ? t("invoices.statusOverdue") : t("invoices.statusDue");
+  const number = "INV-" + String(inv.id).replace(/-/g, "").slice(0, 8).toUpperCase();
+  const extra = waived
+    ? `${t("invoices.waivedOn", { date: fmtTimestampShort(inv.waivedAt) })}${inv.waiveReason ? " · " + t("invoices.waiveReason", { reason: inv.waiveReason }) : ""}`
+    : inv.status === "paid"
+      ? `${t("invoices.paidOn", { date: fmtTimestampShort(inv.paidAt) })}${inv.paymentRef ? " · " + t("invoices.paymentRef", { ref: inv.paymentRef }) : ""}`
+      : "";
+  const lines = inv.items.length
+    ? inv.items.map((it) => `<tr><td>${esc(it.vehicle)}</td><td>${esc(it.customer)}</td><td>${esc(it.dates)}</td><td class="r">${esc(fmtVUV(it.gross))}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="muted">${esc(t("invoices.printNoLines"))}</td></tr>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(number)}</title><style>
+@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E56A3E;padding-bottom:12px;margin-bottom:18px}
+.brand{font-size:22px;font-weight:700}.brand small{display:block;font-size:11px;font-weight:400;color:#555;margin-top:2px}
+.ttl{text-align:right}.ttl h1{margin:0;font-size:22px;letter-spacing:2px}.ttl div{color:#555;margin-top:3px}
+.meta{display:flex;gap:28px;margin-bottom:18px}.meta div{flex:1}.lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#777;margin-bottom:3px}
+table{width:100%;border-collapse:collapse;margin-top:6px}th{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#555;text-align:left;border-bottom:1px solid #999;padding:6px 4px}
+td{padding:7px 4px;border-bottom:1px solid #ddd}.r{text-align:right;white-space:nowrap}th.r{text-align:right}.muted{color:#777}
+.tot{margin:16px 0 0 auto;width:280px}.tot div{display:flex;justify-content:space-between;padding:4px 0}.tot .big{border-top:2px solid #111;margin-top:6px;padding-top:8px;font-size:15px;font-weight:700}
+.note{margin-top:26px;color:#555;font-size:11px;line-height:1.5;border-top:1px solid #ddd;padding-top:10px}.badge{display:inline-block;border:1px solid #111;padding:1px 8px;border-radius:10px;font-size:11px}
+</style></head><body>
+<div class="top"><div class="brand">Terima Rides<small>terimarides.com · bookings@terimarides.com</small></div>
+<div class="ttl"><h1>${esc(t("invoices.printInvoice"))}</h1><div>${esc(number)}</div></div></div>
+<div class="meta">
+<div><div class="lbl">${esc(t("invoices.printSupplier"))}</div><b>${esc(supplierName || "—")}</b></div>
+<div><div class="lbl">${esc(t("invoices.printPeriod"))}</div>${esc(fmtDateFull(inv.periodStart))} – ${esc(fmtDateFull(inv.periodEnd))}</div>
+<div><div class="lbl">${esc(t("invoices.printDue"))}</div>${esc(fmtDateFull(inv.dueDate))}</div>
+<div><div class="lbl">${esc(t("invoices.printStatus"))}</div><span class="badge">${esc(statusLabel)}</span></div></div>
+<table><thead><tr><th>${esc(t("invoices.colVehicle"))}</th><th>${esc(t("invoices.colCustomer"))}</th><th>${esc(t("invoices.colDates"))}</th><th class="r">${esc(t("invoices.colAmount"))} (VUV)</th></tr></thead><tbody>${lines}</tbody></table>
+<div class="tot"><div><span>${esc(t("invoices.printGross"))}</span><span>${esc(fmtVUV(gross))} VUV</span></div>
+<div><span>${esc(t("invoices.printRate"))}</span><span>${esc(Math.round(rate * 1000) / 10)}%</span></div>
+<div class="big"><span>${esc(t("invoices.printAmountDue"))}</span><span>${esc(fmtVUV(waived ? 0 : commission))} VUV</span></div></div>
+${extra ? `<div class="note"><b>${esc(extra)}</b></div>` : ""}
+<div class="note">${esc(t("invoices.printPayNote"))}</div>
+<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},250)}<\/script></body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(t("invoices.printPopupBlocked")); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+function InvoiceRow({ inv, supplierNameForPrint, onMarkPaid, onWaive, onUnwaive, onUnpay, marking, showSupplier }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
   // null | "paid" | "waive" | "unpay": which confirmation panel is showing
@@ -4717,6 +4778,11 @@ function InvoiceRow({ inv, onMarkPaid, onWaive, onUnwaive, onUnpay, marking, sho
               {waived && inv.waiveReason ? ` · ${t("invoices.waiveReason", { reason: inv.waiveReason })}` : ""}
             </span>
             <div className="flex items-center gap-2">
+              <button onClick={() => printInvoice(inv, t, inv.supplierName || supplierNameForPrint)}
+                className="px-2.5 py-1 rounded-full text-[10px]"
+                style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>
+                {t("invoices.printBtn")}
+              </button>
               {!closed && onWaive && !confirming && (
                 <button onClick={() => { setPayRef(""); setConfirming("waive"); }} disabled={marking}
                   className="px-2.5 py-1 rounded-full text-[10px] disabled:opacity-50"
@@ -4860,7 +4926,7 @@ function InvoicesSection() {
           </div>
           <div className="flex flex-col gap-2.5">
             {invoices.map((inv) => (
-              <InvoiceRow key={inv.id} inv={inv} />
+              <InvoiceRow key={inv.id} inv={inv} supplierNameForPrint={profile && profile.business_name} />
             ))}
           </div>
           <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.5, marginTop: 10, lineHeight: 1.5 }}>{t("invoices.viewOnlyNote")}</p>
