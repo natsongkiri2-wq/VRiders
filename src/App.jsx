@@ -522,7 +522,7 @@ const STRINGS = {
       empty: "Add at least 2 vehicles from the list to compare them here.",
     },
     booking: {
-      steps: ["Request", "Confirm", "Pickup", "Return", "Deposit back"],
+      steps: ["Request", "Licence", "Confirm", "Pickup", "Return", "Deposit back"],
       pickupDate: "Pickup date", returnDate: "Return date", continueBtn: "Continue",
       tripLength: "{n} day(s) total", discountApplied: "multi-day rate: {price} VUV/day",
       alreadyBooked: "Already booked:", conflictError: "Those dates overlap with an existing booking — try different dates.",
@@ -582,11 +582,35 @@ const STRINGS = {
       idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — suppliers may ask to see it alongside your license at pickup.",
       photoLabel: "Photo of your license", tapUpload: "Tap to capture or upload",
       verifyBtn: "Verify my license",
-      privacy: "Kept on file with your account and used only to confirm your identity — not automatically shared with suppliers.",
+      privacy: "Kept on file with your account. The supplier you send a booking request to can see these details and the photo for that booking only.",
       checking: "Checking your details...",
       verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
+    },
+    licence: {
+      stepTitle: "Your driving licence",
+      stepIntro: "The supplier will see these details with your request. Check they are right before you send it.",
+      loading: "Checking your licence...",
+      number: "Licence number", country: "Issued in", expiry: "Expires", photoOn: "Photo on file", photoOff: "No photo on file",
+      update: "Update licence details",
+      continueBtn: "Looks right, continue",
+      blocked: "Your licence can't be used for these dates. Update it to continue.",
+      ruleNumberOk: "Licence number looks valid",
+      ruleNumberBad: "Licence number looks too short or has odd characters",
+      ruleExpiryOk: "Valid until after the return date ({date})",
+      ruleExpirySoon: "Expires {date}, shortly after the return date",
+      ruleExpiryBad: "Expired or expires before the return date ({date})",
+      rulePhotoOk: "Licence photo uploaded",
+      rulePhotoBad: "No licence photo uploaded",
+      ruleIdp: "Issued outside Vanuatu ({country}): ask to see the International Driving Permit too",
+      ruleDup: "This licence number is also on another account",
+      panelTitle: "Licence check",
+      panelOk: "Looks fine", panelWarn: "Check at pickup", panelBad: "Needs attention",
+      panelNote: "Automatic check of what the renter entered. It does not confirm the licence with any official register, so still look at the physical licence at pickup.",
+      viewPhoto: "View licence photo", photoError: "Could not open the photo.",
+      unavailable: "Licence details are not available for this booking.",
+      loadingPanel: "Loading licence check...",
     },
     dispute: {
       title: "Report an issue",
@@ -827,7 +851,7 @@ const STRINGS = {
       empty: "Ajoutez au moins 2 véhicules depuis la liste pour les comparer ici.",
     },
     booking: {
-      steps: ["Demande", "Confirmation", "Départ", "Retour", "Caution rendue"],
+      steps: ["Demande", "Permis", "Confirmation", "Départ", "Retour", "Caution rendue"],
       pickupDate: "Date de prise en charge", returnDate: "Date de retour", continueBtn: "Continuer",
       tripLength: "{n} jour(s) au total", discountApplied: "tarif longue durée : {price} VUV/jour",
       alreadyBooked: "Déjà réservé :", conflictError: "Ces dates chevauchent une réservation existante — essayez d'autres dates.",
@@ -887,11 +911,35 @@ const STRINGS = {
       idpNote: "Comme ce permis n'a pas été délivré au Vanuatu, apportez aussi votre Permis de Conduire International (PCI) — les loueurs peuvent le demander au départ.",
       photoLabel: "Photo de votre permis", tapUpload: "Toucher pour photographier ou importer",
       verifyBtn: "Vérifier mon permis",
-      privacy: "Conservée avec votre compte et utilisée uniquement pour confirmer votre identité — non partagée automatiquement avec les loueurs.",
+      privacy: "Conservée avec votre compte. Le loueur à qui vous envoyez une demande peut voir ces informations et la photo, pour cette réservation uniquement.",
       checking: "Vérification en cours...",
       verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
+    },
+    licence: {
+      stepTitle: "Votre permis de conduire",
+      stepIntro: "Le loueur verra ces informations avec votre demande. Vérifiez qu'elles sont correctes avant de l'envoyer.",
+      loading: "Vérification de votre permis...",
+      number: "Numéro de permis", country: "Délivré en", expiry: "Expire le", photoOn: "Photo enregistrée", photoOff: "Aucune photo enregistrée",
+      update: "Modifier mon permis",
+      continueBtn: "C'est correct, continuer",
+      blocked: "Votre permis ne peut pas être utilisé pour ces dates. Mettez-le à jour pour continuer.",
+      ruleNumberOk: "Le numéro de permis semble valide",
+      ruleNumberBad: "Le numéro de permis semble trop court ou contient des caractères inhabituels",
+      ruleExpiryOk: "Valide après la date de retour ({date})",
+      ruleExpirySoon: "Expire le {date}, peu après la date de retour",
+      ruleExpiryBad: "Expiré ou expire avant la date de retour ({date})",
+      rulePhotoOk: "Photo du permis envoyée",
+      rulePhotoBad: "Aucune photo du permis envoyée",
+      ruleIdp: "Délivré hors du Vanuatu ({country}) : demandez aussi le permis international",
+      ruleDup: "Ce numéro de permis figure aussi sur un autre compte",
+      panelTitle: "Contrôle du permis",
+      panelOk: "Semble correct", panelWarn: "À vérifier au départ", panelBad: "À examiner",
+      panelNote: "Contrôle automatique de ce que le client a saisi. Il ne confirme pas le permis auprès d'un registre officiel : regardez quand même le permis physique au départ.",
+      viewPhoto: "Voir la photo du permis", photoError: "Impossible d'ouvrir la photo.",
+      unavailable: "Les informations du permis ne sont pas disponibles pour cette réservation.",
+      loadingPanel: "Chargement du contrôle du permis...",
     },
     dispute: {
       title: "Signaler un problème",
@@ -2591,6 +2639,112 @@ function ComparisonModal({ vehicles, onClose, onRemove, onBook }) {
 
 /* ---------------------------------- booking flow ---------------------------------- */
 
+/* ---------------------------------- licence check (rules only) ---------------------------------- */
+
+// Rules-only check of the licence details a renter entered. It cannot confirm
+// the licence with any official register; it flags things a person would
+// otherwise have to spot by eye. level: ok | warn | fail.
+function evaluateLicence(info, t) {
+  const rules = [];
+  const num = String(info.number || "").replace(/[^a-zA-Z0-9]/g, "");
+  rules.push(num.length >= 4 && num.length <= 20 && /^[a-zA-Z0-9\s\-\/.]+$/.test(String(info.number || ""))
+    ? { id: "number", level: "ok", text: t("licence.ruleNumberOk") }
+    : { id: "number", level: "fail", text: t("licence.ruleNumberBad") });
+  if (!info.expiry) {
+    rules.push({ id: "expiry", level: "fail", text: t("licence.ruleExpiryBad", { date: "—" }) });
+  } else {
+    const ref = info.dateTo || daysFromNow(0);
+    const exp = fmtDateShort(info.expiry);
+    if (info.expiry < ref) rules.push({ id: "expiry", level: "fail", text: t("licence.ruleExpiryBad", { date: exp }) });
+    else {
+      const gap = daysBetween(ref, info.expiry);
+      rules.push(gap <= 30
+        ? { id: "expiry", level: "warn", text: t("licence.ruleExpirySoon", { date: exp }) }
+        : { id: "expiry", level: "ok", text: t("licence.ruleExpiryOk", { date: fmtDateShort(ref) }) });
+    }
+  }
+  rules.push(info.hasPhoto
+    ? { id: "photo", level: "ok", text: t("licence.rulePhotoOk") }
+    : { id: "photo", level: "warn", text: t("licence.rulePhotoBad") });
+  if (info.country && info.country !== "Vanuatu") rules.push({ id: "idp", level: "warn", text: t("licence.ruleIdp", { country: info.country }) });
+  if (info.usedByOthers > 0) rules.push({ id: "dup", level: "fail", text: t("licence.ruleDup") });
+  const overall = rules.some((r) => r.level === "fail") ? "fail" : rules.some((r) => r.level === "warn") ? "warn" : "ok";
+  return { rules, overall };
+}
+
+const LICENCE_COLORS = { ok: "#2E9E86", warn: "#E0A33A", fail: "#D9527A" };
+
+function LicenceRules({ rules }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {rules.map((r) => (
+        <div key={r.id} className="flex items-start gap-2">
+          <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: LICENCE_COLORS[r.level] }} />
+          <span style={{ ...body, fontSize: 12, color: C.sand, lineHeight: 1.45 }}>{r.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Shown on the supplier's booking request. Loads through booking_licence_check,
+// which only returns data to the supplier who owns that booking.
+function LicenceCheckPanel({ bookingId, dateTo }) {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [state, setState] = useState({ loading: true, info: null });
+  const [photoErr, setPhotoErr] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    sbRpc("booking_licence_check", { p_booking_id: bookingId }, accessToken)
+      .then((rows) => {
+        if (cancelled) return;
+        const r = Array.isArray(rows) ? rows[0] : rows;
+        setState({
+          loading: false,
+          info: r ? {
+            number: r.license_number, country: r.license_country, expiry: r.license_expiry,
+            hasPhoto: !!r.has_photo, photoPath: r.photo_path, usedByOthers: r.number_used_by_others || 0,
+            dateTo: r.date_to || dateTo,
+          } : null,
+        });
+      })
+      .catch(() => { if (!cancelled) setState({ loading: false, info: null }); });
+    return () => { cancelled = true; };
+  }, [bookingId]);
+  // Until the SQL is installed (or if the lookup fails) show nothing rather than an error.
+  if (state.loading || !state.info) return null;
+  const { info } = state;
+  const result = evaluateLicence(info, t);
+  const label = { ok: t("licence.panelOk"), warn: t("licence.panelWarn"), fail: t("licence.panelBad") }[result.overall];
+  const openPhoto = async () => {
+    setPhotoErr(false);
+    try {
+      const url = await sbGetSignedUrl("kyc-documents", info.photoPath, accessToken, 300);
+      window.open(url, "_blank", "noopener");
+    } catch (e) { setPhotoErr(true); }
+  };
+  return (
+    <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
+      <div className="flex items-center justify-between mb-2">
+        <span style={{ ...body, fontSize: 11, fontWeight: 700, color: C.sand }}>{t("licence.panelTitle")}</span>
+        <span className="px-2 py-0.5 rounded-full text-[10px]" style={{ ...body, fontWeight: 600, color: LICENCE_COLORS[result.overall], backgroundColor: "rgba(255,255,255,0.06)" }}>{label}</span>
+      </div>
+      <div style={{ ...mono, fontSize: 11.5, color: C.mist, marginBottom: 6 }}>
+        {info.number} · {info.country} · {t("licence.expiry")} {info.expiry ? fmtDateShort(info.expiry) : "—"}
+      </div>
+      <LicenceRules rules={result.rules} />
+      {info.hasPhoto && info.photoPath && (
+        <button onClick={openPhoto} className="mt-2 px-2.5 py-1 rounded-full text-[10.5px]" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+          {t("licence.viewPhoto")}
+        </button>
+      )}
+      {photoErr && <div style={{ ...body, fontSize: 11, color: C.hibiscus, marginTop: 4 }}>{t("licence.photoError")}</div>}
+      <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 6, lineHeight: 1.45 }}>{t("licence.panelNote")}</p>
+    </div>
+  );
+}
+
 function StepTrack({ step }) {
   const { t } = useLang();
   const steps = t("booking.steps");
@@ -3001,7 +3155,9 @@ function BookingModal({ v, resumeBooking, onClose }) {
       .catch((e) => console.error("Availability check failed:", e.message));
     return () => { cancelled = true; };
   }, [v.id, resumeBooking]);
-  const [step, setStep] = useState(resumeBooking ? 2 : 0);
+  const [step, setStep] = useState(resumeBooking ? 3 : 0);
+  const [showLicenceForm, setShowLicenceForm] = useState(false);
+  const [licence, setLicence] = useState({ loading: false, info: null, reload: 0 });
   const [agreed, setAgreed] = useState(false);
   const [dates, setDates] = useState({ from: "", to: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -3146,8 +3302,8 @@ function BookingModal({ v, resumeBooking, onClose }) {
     }
     setChecklist((c) => ({ ...c, [mode]: photos }));
     setActiveChecklist(null);
-    if (mode === "pickup" && Object.keys(photos).length === CHECK_ITEMS.length && step < 3) setStep(3);
-    if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length && step < 4) setStep(4);
+    if (mode === "pickup" && Object.keys(photos).length === CHECK_ITEMS.length && step < 4) setStep(4);
+    if (mode === "return" && Object.keys(photos).length === CHECK_ITEMS.length && step < 5) setStep(5);
   };
 
   // Creates the real booking row when the customer sends their request.
@@ -3156,7 +3312,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const sendRequest = async () => {
     if (!SUPABASE_CONFIGURED || !user) {
       // Local/dev fallback when there's no backend to write to.
-      setStep(2);
+      setStep(3);
       return;
     }
     setSubmitting(true);
@@ -3173,7 +3329,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
         agreed_no_insurance: agreed,
       }], accessToken);
       setBookingId(rows[0].id);
-      setStep(2);
+      setStep(3);
     } catch (e) {
       if (/no_overlapping_bookings|exclusion constraint/i.test(e.message)) {
         setSubmitError(t("booking.datesTaken", { vehicle: v.name, from: fmtDateShort(dates.from), to: fmtDateShort(dates.to) }));
@@ -3222,6 +3378,27 @@ function BookingModal({ v, resumeBooking, onClose }) {
     }
   };
 
+  // Licence step: read what is on the renter's profile and run the same rules
+  // the supplier will see. Reloads after the renter edits their details.
+  useEffect(() => {
+    if (step !== 1 || !user) return;
+    if (!SUPABASE_CONFIGURED) { setLicence({ loading: false, info: null, reload: licence.reload }); return; }
+    let cancelled = false;
+    setLicence((l) => ({ ...l, loading: true }));
+    sbSelect("profiles", { select: "license_number,license_country,license_expiry,license_photo_url", query: `&id=eq.${user.id}`, accessToken })
+      .then((rows) => {
+        if (cancelled) return;
+        const r = rows[0] || {};
+        setLicence((l) => ({ ...l, loading: false, info: {
+          number: r.license_number || "", country: r.license_country || "", expiry: r.license_expiry || "",
+          hasPhoto: !!r.license_photo_url, usedByOthers: 0, dateTo: dates.to,
+        } }));
+      })
+      .catch(() => { if (!cancelled) setLicence((l) => ({ ...l, loading: false, info: null })); });
+    return () => { cancelled = true; };
+  }, [step, licence.reload]);
+  const licenceResult = licence.info ? evaluateLicence(licence.info, t) : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.65)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl p-6 max-h-[92vh] overflow-y-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
@@ -3231,6 +3408,13 @@ function BookingModal({ v, resumeBooking, onClose }) {
         </div>
 
         <StepTrack step={step} />
+
+        {showLicenceForm && (
+          <IDVerificationModal
+            onClose={() => setShowLicenceForm(false)}
+            onVerified={() => { setShowLicenceForm(false); setLicence((l) => ({ ...l, reload: l.reload + 1 })); }}
+          />
+        )}
 
         {step === 0 && (
           <div>
@@ -3291,6 +3475,46 @@ function BookingModal({ v, resumeBooking, onClose }) {
 
         {step === 1 && (
           <div>
+            <p style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("licence.stepTitle")}</p>
+            <p style={{ ...body, fontSize: 12, color: C.mist, lineHeight: 1.55, margin: "4px 0 12px" }}>{t("licence.stepIntro")}</p>
+            {licence.loading && (
+              <div className="flex items-center gap-2 py-4"><Loader2 size={14} className="animate-spin" color={C.mist} />
+                <span style={{ ...body, fontSize: 12, color: C.mist }}>{t("licence.loading")}</span></div>
+            )}
+            {!licence.loading && licenceResult && (
+              <div className="rounded-xl p-3.5" style={{ backgroundColor: C.panelSoft }}>
+                <div style={{ ...mono, fontSize: 12, color: C.sand, marginBottom: 8 }}>
+                  {licence.info.number} · {licence.info.country}
+                </div>
+                <LicenceRules rules={licenceResult.rules} />
+              </div>
+            )}
+            {!licence.loading && licenceResult && licenceResult.overall === "fail" && (
+              <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{t("licence.blocked")}</span>
+              </div>
+            )}
+            <button onClick={() => setShowLicenceForm(true)} className="w-full mt-3 py-2 rounded-xl text-sm" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+              {t("licence.update")}
+            </button>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setStep(0)} className="w-11 h-10 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
+                <ChevronLeft size={16} color={C.mist} />
+              </button>
+              <button
+                disabled={licence.loading || (licenceResult && licenceResult.overall === "fail")}
+                onClick={() => setStep(2)}
+                className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+                style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}
+              >
+                {t("licence.continueBtn")} <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
             <div className="rounded-xl p-3.5 mb-3" style={{ backgroundColor: C.panelSoft }}>
               <p style={{ ...body, fontSize: 12.5, color: C.mist, lineHeight: 1.6 }}>
                 {t("booking.noInsurance", {
@@ -3306,7 +3530,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
               </span>
             </label>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setStep(0)} className="w-11 h-10 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
+              <button onClick={() => setStep(1)} className="w-11 h-10 rounded-xl flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
                 <ChevronLeft size={16} color={C.mist} />
               </button>
               <button
@@ -3326,7 +3550,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
           </div>
         )}
 
-        {step >= 2 && (
+        {step >= 3 && (
           <div className="text-center py-2">
             <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.lagoon }}>
               <Check size={22} color="#fff" />
@@ -6253,6 +6477,7 @@ function SupplierDashboard({ onOpenAuth }) {
                     </a>
                   </div>
                 )}
+                {(r.status === "pending" || r.status === "accepted") && <LicenceCheckPanel bookingId={r.id} dateTo={r.dateTo} />}
                 {(r.pickupNote || r.returnNote) && (
                   <div className="mt-2.5 pt-2.5 flex flex-col gap-1.5" style={{ borderTop: `1px dashed ${C.line}` }}>
                     {r.pickupNote && (
