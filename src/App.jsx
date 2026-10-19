@@ -1741,6 +1741,12 @@ function daysBetween(from, to) {
   return Math.max(1, Math.round(ms / 86400000));
 }
 
+// Date with the year, for dates where the year matters (licence expiry).
+function fmtDateFull(iso) {
+  if (!iso) return "";
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 function fmtDateShort(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
@@ -2673,13 +2679,13 @@ function evaluateLicence(info, t) {
     rules.push({ id: "expiry", level: "fail", text: t("licence.ruleExpiryBad", { date: "—" }) });
   } else {
     const ref = info.dateTo || daysFromNow(0);
-    const exp = fmtDateShort(info.expiry);
+    const exp = fmtDateFull(info.expiry);
     if (info.expiry < ref) rules.push({ id: "expiry", level: "fail", text: t("licence.ruleExpiryBad", { date: exp }) });
     else {
       const gap = daysBetween(ref, info.expiry);
       rules.push(gap <= 30
         ? { id: "expiry", level: "warn", text: t("licence.ruleExpirySoon", { date: exp }) }
-        : { id: "expiry", level: "ok", text: t("licence.ruleExpiryOk", { date: fmtDateShort(ref) }) });
+        : { id: "expiry", level: "ok", text: t("licence.ruleExpiryOk", { date: fmtDateFull(ref) }) });
     }
   }
   rules.push(info.hasPhoto
@@ -2750,7 +2756,7 @@ function LicenceCheckPanel({ bookingId, dateTo }) {
         <span className="px-2 py-0.5 rounded-full text-[10px]" style={{ ...body, fontWeight: 600, color: LICENCE_COLORS[result.overall], backgroundColor: "rgba(255,255,255,0.06)" }}>{label}</span>
       </div>
       <div style={{ ...mono, fontSize: 11.5, color: C.mist, marginBottom: 6 }}>
-        {info.number} · {info.country} · {t("licence.expiry")} {info.expiry ? fmtDateShort(info.expiry) : "—"}
+        {info.number} · {info.country} · {t("licence.expiry")} {info.expiry ? fmtDateFull(info.expiry) : "—"}
       </div>
       <LicenceRules rules={result.rules} />
       {info.hasPhoto && info.photoPath && (
@@ -3879,7 +3885,7 @@ function IDVerificationModal({ onClose, onVerified }) {
       else {
         if (codes.includes("name_mismatch")) msgs.push(t("id.checkName"));
         if (codes.includes("number_mismatch")) msgs.push(t("id.checkNumber"));
-        if (codes.includes("photo_expired")) msgs.unshift(t("id.checkPhotoExpired", { date: fmtDateShort(verdict.expiredOn) }));
+        if (codes.includes("photo_expired")) msgs.unshift(t("id.checkPhotoExpired", { date: fmtDateFull(verdict.expiredOn) }));
         else if (codes.includes("expiry_mismatch")) msgs.push(t("id.checkExpiry"));
       }
       return fail(msgs.join(" "));
