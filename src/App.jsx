@@ -604,7 +604,7 @@ const STRINGS = {
       verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
-      dob: "Date of birth", dobNote: "Used only to check you are old enough to rent (21 or over).", tooYoung: "You must be 21 or over to rent a vehicle on Terima Rides.",
+      dob: "Date of birth", day: "Day", month: "Month", year: "Year", dobNote: "Used only to check you are old enough to rent (21 or over).", tooYoung: "You must be 21 or over to rent a vehicle on Terima Rides.",
     },
     licence: {
       stepTitle: "Your driving licence",
@@ -971,7 +971,7 @@ const STRINGS = {
       verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
-      dob: "Date de naissance", dobNote: "Utilisée uniquement pour vérifier que vous avez l'âge requis (21 ans ou plus).", tooYoung: "Vous devez avoir 21 ans ou plus pour louer un véhicule sur Terima Rides.",
+      dob: "Date de naissance", day: "Jour", month: "Mois", year: "Année", dobNote: "Utilisée uniquement pour vérifier que vous avez l'âge requis (21 ans ou plus).", tooYoung: "Vous devez avoir 21 ans ou plus pour louer un véhicule sur Terima Rides.",
     },
     licence: {
       stepTitle: "Votre permis de conduire",
@@ -3649,8 +3649,7 @@ function BookingModal({ v, resumeBooking, onClose }) {
             {!licence.loading && licence.info && licence.info.number && !licence.info.dob && (
               <div className="rounded-xl p-3.5 mt-3" style={{ backgroundColor: C.panelSoft, border: `1px solid ${C.line}` }}>
                 <p style={{ ...body, fontSize: 12, fontWeight: 600, color: C.sand, marginBottom: 6 }}>{t("licence.dobQuick")}</p>
-                <input type="date" value={quickDob.value} max={daysFromNow(0)} onChange={(e) => setQuickDob((q) => ({ ...q, value: e.target.value, error: "" }))}
-                  className="w-full rounded-lg px-3 py-2 text-sm" style={{ ...body, backgroundColor: C.panel, border: `1px solid ${C.line}`, color: C.sand }} />
+                <DateSelect value={quickDob.value} onChange={(v) => setQuickDob((q) => ({ ...q, value: v, error: "" }))} yearFrom={1930} yearTo={new Date().getFullYear() - 16} descending />
                 <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 4 }}>{t("id.dobNote")}</p>
                 {quickDob.error && <p style={{ ...body, fontSize: 11.5, color: C.hibiscus, marginTop: 4 }}>{quickDob.error}</p>}
                 <button disabled={!quickDob.value || quickDob.saving} onClick={saveQuickDob} className="w-full mt-2 py-2 rounded-xl text-sm disabled:opacity-40"
@@ -3964,6 +3963,47 @@ const inputStyle = {
 
 const LICENSE_COUNTRIES = ["Vanuatu", "Australia", "New Zealand", "France", "United Kingdom", "United States", "Other"];
 
+// Day / month / year dropdowns instead of the browser's calendar popup, so a
+// birth year like 1972 is one pick away. Value is an ISO date (yyyy-mm-dd) and
+// is only reported once all three parts are chosen.
+function DateSelect({ value, onChange, yearFrom, yearTo, descending }) {
+  const { t } = useLang();
+  const parts = (value || "").split("-");
+  const [st, setSt] = useState({ y: parts[0] || "", m: parts[1] ? String(Number(parts[1])) : "", d: parts[2] ? String(Number(parts[2])) : "" });
+  useEffect(() => {
+    if (value) { const q = value.split("-"); setSt({ y: q[0], m: String(Number(q[1])), d: String(Number(q[2])) }); }
+  }, [value]);
+  const months = t("supplier.months");
+  const years = [];
+  for (let y = yearFrom; y <= yearTo; y++) years.push(y);
+  if (descending) years.reverse();
+  const dim = st.y && st.m ? new Date(Number(st.y), Number(st.m), 0).getDate() : 31;
+  const update = (patch) => {
+    const n = { ...st, ...patch };
+    if (n.d && Number(n.d) > new Date(Number(n.y || 2000), Number(n.m || 1), 0).getDate()) n.d = "";
+    setSt(n);
+    if (n.y && n.m && n.d) onChange(`${n.y}-${String(n.m).padStart(2, "0")}-${String(n.d).padStart(2, "0")}`);
+    else onChange("");
+  };
+  const sel = { ...inputStyle, padding: "8px 10px" };
+  return (
+    <div className="flex gap-2">
+      <select value={st.d} onChange={(e) => update({ d: e.target.value })} className="rounded-lg outline-none" style={{ ...sel, width: "24%" }} aria-label={t("id.day")}>
+        <option value="">{t("id.day")}</option>
+        {Array.from({ length: dim }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+      </select>
+      <select value={st.m} onChange={(e) => update({ m: e.target.value })} className="rounded-lg outline-none" style={{ ...sel, width: "40%" }} aria-label={t("id.month")}>
+        <option value="">{t("id.month")}</option>
+        {months.map((m, i) => <option key={i} value={String(i + 1)}>{m}</option>)}
+      </select>
+      <select value={st.y} onChange={(e) => update({ y: e.target.value })} className="rounded-lg outline-none" style={{ ...sel, width: "36%" }} aria-label={t("id.year")}>
+        <option value="">{t("id.year")}</option>
+        {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function IDVerificationModal({ onClose, onVerified }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
@@ -4123,14 +4163,12 @@ function IDVerificationModal({ onClose, onVerified }) {
                 </div>
                 <div>
                   <FieldLabel>{t("id.expiry")}</FieldLabel>
-                  <input type="date" value={form.expiry} onChange={(e) => set("expiry", e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                  <DateSelect value={form.expiry} onChange={(v) => set("expiry", v)} yearFrom={new Date().getFullYear()} yearTo={new Date().getFullYear() + 20} />
                 </div>
               </div>
               <div>
                 <FieldLabel>{t("id.dob")}</FieldLabel>
-                <input type="date" value={form.dob} max={daysFromNow(0)} onChange={(e) => set("dob", e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                <DateSelect value={form.dob} onChange={(v) => set("dob", v)} yearFrom={1930} yearTo={new Date().getFullYear() - 16} descending />
                 <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4, lineHeight: 1.4 }}>{t("id.dobNote")}</p>
               </div>
               <div>
