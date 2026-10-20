@@ -635,6 +635,12 @@ const STRINGS = {
     supplier: {
       dashboardLabel: "SUPPLIER DASHBOARD",
       welcomeBack: "Welcome back, {supplier}",
+      editProfile: "Edit profile", profileTitle: "Your supplier profile",
+      profileIntro: "Renters see your business name and use this phone number to call or WhatsApp you about bookings.",
+      profileBusinessName: "Business name", profileContactName: "Contact person", profilePhone: "Phone / WhatsApp", profileEmail: "Contact email",
+      profilePhoneHint: "Include the country code, e.g. +678 711 6413", profileSave: "Save changes", profileCancel: "Cancel",
+      profileInvalid: "Please fill in every field. The phone needs at least 7 digits and the email must be valid.",
+
       justAdded: "{name} is live and pending verification — it'll show up for customers shortly.",
       activeListings: "Active listings", pendingRequests: "Pending requests", avgRating: "Avg. rating", monthlyBookings: "Completed this month",
       bookingRequests: "Booking requests",
@@ -658,7 +664,7 @@ const STRINGS = {
       editVehicle: "Edit vehicle",
       managePhotos: "Manage photos", addPhoto: "Add photo", removePhoto: "Remove photo", donePhotos: "Done",
       photoLimitNote: "Up to {max} photos — customers see all of them on the listing.",
-      serviceFeeLabel: "Service fee:", serviceFee: "Terima Rides invoices you 8% commission on confirmed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
+      serviceFeeLabel: "Service fee:", serviceFee: "Terima Rides invoices you 8% commission on completed bookings, monthly by bank transfer — you keep 100% of the direct payment from your customer.",
       statusPending: "pending", statusAccepted: "accepted", statusDeclined: "declined", statusCompleted: "completed", statusCancelled: "cancelled",
       cancelBooking: "Cancel booking", cancelBookingConfirm: "Cancel this booking? This can't be undone.", confirmCancelBooking: "Yes, cancel it",
       cancelledOn: "cancelled {date}", cancelledByYouNote: "You cancelled this booking.", cancelledByCustomerNote: "The customer cancelled this booking.",
@@ -728,7 +734,7 @@ const STRINGS = {
       gateBody: "Reach every customer searching Efate rentals. A quick one-time verification, then you're live.",
       gateBullet1: "More visibility, no marketing spend",
       gateBullet2: "You keep control of pricing and deposit terms",
-      gateBullet3: "Nothing upfront — pay only on confirmed bookings",
+      gateBullet3: "Nothing upfront — pay only on completed bookings",
       startBtn: "Start verification",
       title: "Verify your business",
       subtitle: "A quick check so renters know you're a real, accountable supplier.",
@@ -979,6 +985,12 @@ const STRINGS = {
     supplier: {
       dashboardLabel: "TABLEAU DE BORD LOUEUR",
       welcomeBack: "Bon retour, {supplier}",
+      editProfile: "Modifier le profil", profileTitle: "Votre profil de loueur",
+      profileIntro: "Les clients voient le nom de votre entreprise et utilisent ce numéro pour vous appeler ou vous écrire sur WhatsApp au sujet des réservations.",
+      profileBusinessName: "Nom de l'entreprise", profileContactName: "Personne de contact", profilePhone: "Téléphone / WhatsApp", profileEmail: "E-mail de contact",
+      profilePhoneHint: "Avec l'indicatif du pays, par ex. +678 711 6413", profileSave: "Enregistrer", profileCancel: "Annuler",
+      profileInvalid: "Remplissez tous les champs. Le téléphone doit avoir au moins 7 chiffres et l'e-mail doit être valide.",
+
       justAdded: "{name} est en ligne et en attente de vérification — il apparaîtra bientôt pour les clients.",
       activeListings: "Annonces actives", pendingRequests: "Demandes en attente", avgRating: "Note moyenne", monthlyBookings: "Terminées ce mois-ci",
       bookingRequests: "Demandes de réservation",
@@ -1002,7 +1014,7 @@ const STRINGS = {
       editVehicle: "Modifier le véhicule",
       managePhotos: "Gérer les photos", addPhoto: "Ajouter une photo", removePhoto: "Supprimer la photo", donePhotos: "Terminé",
       photoLimitNote: "Jusqu'à {max} photos — les clients les voient toutes sur l'annonce.",
-      serviceFeeLabel: "Frais de service :", serviceFee: "Terima Rides vous facture une commission de 8% sur les réservations confirmées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
+      serviceFeeLabel: "Frais de service :", serviceFee: "Terima Rides vous facture une commission de 8% sur les réservations terminées, par virement mensuel — vous gardez 100% du paiement direct de votre client.",
       statusPending: "en attente", statusAccepted: "acceptée", statusDeclined: "refusée", statusCompleted: "terminée", statusCancelled: "annulée",
       cancelBooking: "Annuler la réservation", cancelBookingConfirm: "Annuler cette réservation ? Cette action est irréversible.", confirmCancelBooking: "Oui, annuler",
       cancelledOn: "annulée le {date}", cancelledByYouNote: "Vous avez annulé cette réservation.", cancelledByCustomerNote: "Le client a annulé cette réservation.",
@@ -1072,7 +1084,7 @@ const STRINGS = {
       gateBody: "Touchez tous les clients qui cherchent une location sur Efate. Une vérification rapide, une seule fois, puis vous êtes en ligne.",
       gateBullet1: "Plus de visibilité, sans dépense marketing",
       gateBullet2: "Vous gardez le contrôle des prix et des conditions de caution",
-      gateBullet3: "Rien à payer d'avance — seulement sur les réservations confirmées",
+      gateBullet3: "Rien à payer d'avance — seulement sur les réservations terminées",
       startBtn: "Démarrer la vérification",
       title: "Vérifiez votre activité",
       subtitle: "Une vérification rapide pour que les clients sachent que vous êtes un loueur fiable et identifiable.",
@@ -1696,6 +1708,30 @@ function SupplierAuthProvider({ children }) {
     setStatus("pending");
   };
 
+  // Lets a verified supplier edit their own contact details. KYC fields and
+  // documents are not touched here (the database also blocks those).
+  const updateProfile = async (patch) => {
+    if (!SUPABASE_CONFIGURED || !user || !profile || !profile.id) {
+      setProfile((p) => ({ ...p, ...patch }));
+      return;
+    }
+    // Contact columns can't be read back through the public API, so ask only for
+    // the number of rows changed (Content-Range) instead of the updated rows.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/suppliers?id=eq.${profile.id}`, {
+      method: "PATCH",
+      headers: { ...sbHeaders(accessToken), Prefer: "return=headers-only,count=exact" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      let msg = "";
+      try { msg = (await res.json()).message || ""; } catch (_) { /* ignore */ }
+      throw new Error(msg || "Could not save your changes.");
+    }
+    if (/\/0$/.test(res.headers.get("content-range") || "")) throw new Error("Could not save your changes.");
+    const fresh = await sbRpc("get_my_supplier", {}, accessToken);
+    setProfile(fresh && fresh.id ? fresh : { ...profile, ...patch });
+  };
+
   // Real KYC approval is an admin/service-role action, blocked from the client
   // by RLS on purpose — same as it should be in production. This attempts the
   // real update (which will correctly fail) so the security boundary is visible,
@@ -1714,7 +1750,7 @@ function SupplierAuthProvider({ children }) {
   };
 
   return (
-    <SupplierAuthContext.Provider value={{ status, profile, submitApplication, simulateApproval, loadingSupplier, applyError }}>
+    <SupplierAuthContext.Provider value={{ status, profile, submitApplication, simulateApproval, updateProfile, loadingSupplier, applyError }}>
       {children}
     </SupplierAuthContext.Provider>
   );
@@ -6006,10 +6042,87 @@ function AdminInvoices() {
   );
 }
 
+function SupplierProfileModal({ onClose }) {
+  const { t } = useLang();
+  const { profile, updateProfile } = useSupplierAuth();
+  const [form, setForm] = useState({
+    business_name: (profile && profile.business_name) || "",
+    contact_name: (profile && profile.contact_name) || "",
+    phone: (profile && profile.phone) || "",
+    email: (profile && profile.email) || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const valid = form.business_name.trim().length >= 2 && form.contact_name.trim().length >= 2
+    && form.phone.replace(/[^0-9]/g, "").length >= 7 && /^\S+@\S+\.\S+$/.test(form.email.trim());
+  const save = async () => {
+    if (!valid) { setError(t("supplier.profileInvalid")); return; }
+    setSaving(true); setError("");
+    try {
+      await updateProfile({
+        business_name: form.business_name.trim(), contact_name: form.contact_name.trim(),
+        phone: form.phone.trim(), email: form.email.trim(),
+      });
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[65] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.75)" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl p-6 max-h-[92vh] overflow-y-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex items-center justify-between mb-1">
+          <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{t("supplier.profileTitle")}</span>
+          <button onClick={onClose}><X size={18} color={C.mist} /></button>
+        </div>
+        <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7, marginBottom: 16, lineHeight: 1.5 }}>{t("supplier.profileIntro")}</p>
+        <div className="flex flex-col gap-3.5">
+          <div>
+            <FieldLabel>{t("supplier.profileBusinessName")}</FieldLabel>
+            <input value={form.business_name} onChange={(e) => set("business_name", e.target.value)} maxLength={80}
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <FieldLabel>{t("supplier.profileContactName")}</FieldLabel>
+            <input value={form.contact_name} onChange={(e) => set("contact_name", e.target.value)} maxLength={80}
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+          </div>
+          <div>
+            <FieldLabel>{t("supplier.profilePhone")}</FieldLabel>
+            <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} maxLength={30}
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+            <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4 }}>{t("supplier.profilePhoneHint")}</p>
+          </div>
+          <div>
+            <FieldLabel>{t("supplier.profileEmail")}</FieldLabel>
+            <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} maxLength={120}
+              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+          </div>
+        </div>
+        {error && (
+          <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+            <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{error}</span>
+          </div>
+        )}
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>{t("supplier.profileCancel")}</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+            style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : t("supplier.profileSave")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SupplierDashboard({ onOpenAuth }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
   const { status, profile } = useSupplierAuth();
+  const [showProfile, setShowProfile] = useState(false);
   const [reqs, setReqs] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsError, setBookingsError] = useState("");
@@ -6498,9 +6611,16 @@ function SupplierDashboard({ onOpenAuth }) {
           <span style={{ ...body, fontSize: 9.5, fontWeight: 600, color: C.lagoon }}>{t("kyc.verifiedBadge")}</span>
         </span>
       </div>
-      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26, marginTop: 4 }}>
-        {t("supplier.welcomeBack", { supplier: (profile && profile.business_name) || "Vila 4x4 Rentals" })}
-      </h2>
+      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 4 }}>
+        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26 }}>
+          {t("supplier.welcomeBack", { supplier: (profile && profile.business_name) || "Vila 4x4 Rentals" })}
+        </h2>
+        <button onClick={() => setShowProfile(true)} className="px-3 py-1.5 rounded-full text-[11px] flex items-center gap-1.5"
+          style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+          <Pencil size={11} /> {t("supplier.editProfile")}
+        </button>
+      </div>
+      {showProfile && <SupplierProfileModal onClose={() => setShowProfile(false)} />}
 
       {vehiclesError && (
         <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
