@@ -661,6 +661,8 @@ const STRINGS = {
       justAdded: "{name} is live and pending verification — it'll show up for customers shortly.",
       activeListings: "Active listings", pendingRequests: "Pending requests", avgRating: "Avg. rating", monthlyBookings: "Completed this month",
       bookingRequests: "Booking requests",
+      confirmRequest: "Confirm",
+      declineRequest: "Decline",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       depositOverdue: "{duration} overdue", overdueDepositsBanner: "{n} deposit(s) past the 48-hour refund window — your customers can already see this as overdue.",
@@ -1028,6 +1030,8 @@ const STRINGS = {
       justAdded: "{name} est en ligne et en attente de vérification — il apparaîtra bientôt pour les clients.",
       activeListings: "Annonces actives", pendingRequests: "Demandes en attente", avgRating: "Note moyenne", monthlyBookings: "Terminées ce mois-ci",
       bookingRequests: "Demandes de réservation",
+      confirmRequest: "Confirmer",
+      declineRequest: "Refuser",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       depositOverdue: "en retard de {duration}", overdueDepositsBanner: "{n} caution(s) au-delà du délai de 48 heures — vos clients le voient déjà comme en retard.",
@@ -7142,21 +7146,22 @@ function SupplierDashboard({ onOpenAuth }) {
                     <div style={{ ...body, color: C.sand, fontWeight: 600, fontSize: 13.5 }}>{r.vehicle}</div>
                     <div style={{ ...body, color: C.mist, opacity: 0.65, fontSize: 12 }}>{r.customer} · {r.dates}</div>
                   </div>
-                  {r.status === "pending" ? (
-                    <div className="flex gap-1.5">
-                      <button onClick={() => act(r.id, "accepted")} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: C.lagoon }}>
-                        <Check size={13} color="#fff" />
-                      </button>
-                      <button onClick={() => act(r.id, "declined")} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ border: `1px solid ${C.line}` }}>
-                        <X size={13} color={C.mist} />
-                      </button>
-                    </div>
-                  ) : r.status !== "completed" ? (
+                  {r.status === "pending" ? null : r.status !== "completed" ? (
                     <span className="px-2.5 py-1 rounded-full text-[10px]" style={{ ...body, fontWeight: 600, backgroundColor: r.status === "accepted" ? "rgba(46,158,134,0.18)" : "rgba(217,82,122,0.18)", color: r.status === "accepted" ? C.lagoon : C.hibiscus }}>
                       {bookingStatusLabel(t, r.status)}
                     </span>
                   ) : null}
                 </div>
+                {r.status === "pending" && (
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => act(r.id, "accepted")} className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5" style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
+                      <Check size={13} color="#fff" /> {t("supplier.confirmRequest")}
+                    </button>
+                    <button onClick={() => act(r.id, "declined")} className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                      <X size={13} color={C.mist} /> {t("supplier.declineRequest")}
+                    </button>
+                  </div>
+                )}
                 {custDigits && (
                   <div className="flex items-center gap-2 mt-2.5 pt-2.5" style={{ borderTop: `1px dashed ${C.line}` }}>
                     <a href={`https://wa.me/${custDigits}?text=${custMsg}`} target="_blank" rel="noreferrer"
