@@ -594,6 +594,12 @@ const STRINGS = {
       checkUnavailable: "We couldn't check the photo just now. Please try again, or retake it flat and in good light.",
       checkRateLimited: "Too many attempts. Please wait an hour and try again.",
       checkUploadFailed: "We couldn't upload your photo. Check your connection and try again.",
+      reviewOffer: "Photo clear but still not accepted? Send it to our team to check by hand.",
+      reviewBtn: "Send for manual review", reviewSending: "Sending…",
+      reviewSentTitle: "Sent for review", reviewSentSub: "We'll check your licence photo by hand, usually within one working day. Your booking can't be confirmed until it's approved, so come back to this page afterwards.",
+      reviewPending: "Your licence is waiting for manual review. We'll update this page when it's done.",
+      reviewRejected: "Your last licence review was declined: {note}. Please check your details and photo and try again.",
+      reviewFailed: "We couldn't send your photo for review. Please try again.", reviewClose: "Close",
       verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
@@ -643,6 +649,7 @@ const STRINGS = {
       profilePendingBanner: "Your profile changes are waiting for approval. Your current details stay live until then.",
       profileRejectedBanner: "Your last profile change was not approved: {note}",
       profileDone: "Done", profileNoChange: "Nothing to change yet. Edit a field first.",
+      adminLicenceHeading: "Licence photos awaiting manual review", adminLicenceViewPhoto: "View photo", adminLicenceApprove: "Approve & mark verified", adminLicenceReject: "Reject", adminLicenceReason: "Reason shown to the renter (required)", adminLicenceConfirmReject: "Confirm reject", adminLicenceCompare: "Compare the typed details with the photo before approving.", adminLicenceCancel: "Cancel",
       adminChangesHeading: "Profile changes awaiting approval", adminChangeApprove: "Approve", adminChangeReject: "Reject",
       adminChangeReason: "Reason for rejecting (required)", adminChangeConfirmReject: "Confirm reject", adminChangeRequested: "Requested",
       profileInvalid: "Please fill in every field. The phone needs at least 7 digits and the email must be valid.",
@@ -950,6 +957,12 @@ const STRINGS = {
       checkUnavailable: "Impossible de vérifier la photo pour le moment. Réessayez, ou reprenez-la à plat et bien éclairée.",
       checkRateLimited: "Trop de tentatives. Réessayez dans une heure.",
       checkUploadFailed: "Impossible d'envoyer votre photo. Vérifiez votre connexion et réessayez.",
+      reviewOffer: "La photo est nette mais refusée ? Envoyez-la à notre équipe pour une vérification manuelle.",
+      reviewBtn: "Envoyer pour vérification manuelle", reviewSending: "Envoi…",
+      reviewSentTitle: "Envoyé pour vérification", reviewSentSub: "Nous vérifierons la photo de votre permis manuellement, généralement sous un jour ouvré. Votre réservation ne peut pas être confirmée avant validation : revenez sur cette page ensuite.",
+      reviewPending: "Votre permis est en attente de vérification manuelle. Cette page sera mise à jour une fois terminée.",
+      reviewRejected: "Votre dernière vérification a été refusée : {note}. Vérifiez vos informations et votre photo, puis réessayez.",
+      reviewFailed: "Impossible d'envoyer votre photo pour vérification. Réessayez.", reviewClose: "Fermer",
       verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
@@ -999,6 +1012,7 @@ const STRINGS = {
       profilePendingBanner: "Vos modifications de profil sont en attente de validation. Vos informations actuelles restent en ligne d'ici là.",
       profileRejectedBanner: "Votre dernière modification de profil n'a pas été validée : {note}",
       profileDone: "Terminé", profileNoChange: "Rien à modifier pour l'instant. Modifiez d'abord un champ.",
+      adminLicenceHeading: "Photos de permis en attente de vérification", adminLicenceViewPhoto: "Voir la photo", adminLicenceApprove: "Valider et marquer vérifié", adminLicenceReject: "Refuser", adminLicenceReason: "Motif affiché au locataire (obligatoire)", adminLicenceConfirmReject: "Confirmer le refus", adminLicenceCompare: "Comparez les informations saisies avec la photo avant de valider.", adminLicenceCancel: "Annuler",
       adminChangesHeading: "Modifications de profil à valider", adminChangeApprove: "Valider", adminChangeReject: "Refuser",
       adminChangeReason: "Motif du refus (obligatoire)", adminChangeConfirmReject: "Confirmer le refus", adminChangeRequested: "Demandé",
       profileInvalid: "Remplissez tous les champs. Le téléphone doit avoir au moins 7 chiffres et l'e-mail doit être valide.",
@@ -3883,7 +3897,35 @@ function IDVerificationModal({ onClose, onVerified }) {
   const [stage, setStage] = useState("form"); // form | checking | done
   const [form, setForm] = useState({ fullName: "", phone: "", licenseNumber: "", country: "Vanuatu", expiry: "", photo: null });
   const [error, setError] = useState("");
+  const [reviewable, setReviewable] = useState(false); // the automatic check rejected the photo: offer manual review
+  const [sendingReview, setSendingReview] = useState(false);
+  const [lastReview, setLastReview] = useState(null);
   const set = (k, v) => setForm({ ...form, [k]: v });
+
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !user || !accessToken) return;
+    sbRpc("my_licence_review", {}, accessToken)
+      .then((r) => { const row = Array.isArray(r) ? r[0] : r; if (row && row.status !== "approved") setLastReview(row); })
+      .catch(() => {}); // not installed yet: no review banner
+  }, [user && user.id]);
+
+  const sendForReview = async () => {
+    setSendingReview(true); setError("");
+    try {
+      const mime = (form.photoFile && form.photoFile.type) || "image/jpeg";
+      const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+      const path = `${user.id}/license-review.${ext}`;
+      await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, form.photoFile, accessToken);
+      await sbRpc("submit_licence_review", {
+        p_full_name: form.fullName.trim(), p_phone: form.phone.trim(), p_license_number: form.licenseNumber.trim(),
+        p_country: form.country, p_expiry: form.expiry, p_photo_path: path,
+      }, accessToken);
+      setStage("sent");
+    } catch (e) {
+      console.error("Licence review submit failed:", e.message);
+      setError(t("id.reviewFailed"));
+    } finally { setSendingReview(false); }
+  };
 
   const needsIDP = form.country !== "Vanuatu" && form.country !== "";
   const valid = form.fullName.trim() && form.phone.trim() && form.licenseNumber.trim() && form.expiry && form.photo;
@@ -3911,6 +3953,7 @@ function IDVerificationModal({ onClose, onVerified }) {
       return;
     }
     setError("");
+    setReviewable(false);
     setStage("checking");
     // The photo is read on this device (OCR) and compared with what was typed.
     // Only on a full match is the licence saved and id_verified set. It does not
@@ -3919,7 +3962,7 @@ function IDVerificationModal({ onClose, onVerified }) {
       setTimeout(() => setStage("done"), 600);
       return;
     }
-    const fail = (msg) => { setError(msg); setStage("form"); };
+    const fail = (msg, canReview = false) => { setError(msg); setReviewable(canReview); setStage("form"); };
     let verdict;
     try {
       const text = await readLicencePhoto(form.photo);
@@ -3939,7 +3982,7 @@ function IDVerificationModal({ onClose, onVerified }) {
         if (codes.includes("photo_expired")) msgs.unshift(t("id.checkPhotoExpired", { date: fmtDateFull(verdict.expiredOn) }));
         else if (codes.includes("expiry_mismatch")) msgs.push(t("id.checkExpiry"));
       }
-      return fail(msgs.join(" "));
+      return fail(msgs.join(" "), true);
     }
     let licensePhotoPath;
     try {
@@ -4053,9 +4096,28 @@ function IDVerificationModal({ onClose, onVerified }) {
                 </label>
               </div>
 
+              {lastReview && !error && (
+                <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: C.panelSoft, border: `1px solid ${C.line}` }}>
+                  <span style={{ ...body, fontSize: 12.5, color: C.sand, lineHeight: 1.5 }}>
+                    {lastReview.status === "pending" ? t("id.reviewPending") : t("id.reviewRejected", { note: lastReview.note || "" })}
+                  </span>
+                </div>
+              )}
+
               {error && (
                 <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
                   <span style={{ ...body, fontSize: 13, fontWeight: 700, color: "#FFE3EB", lineHeight: 1.45 }}>{error}</span>
+                </div>
+              )}
+
+              {reviewable && (
+                <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: C.panelSoft, border: `1px solid ${C.line}` }}>
+                  <p style={{ ...body, fontSize: 12, color: C.mist, lineHeight: 1.5, marginBottom: 8 }}>{t("id.reviewOffer")}</p>
+                  <button disabled={sendingReview} onClick={sendForReview}
+                    className="w-full py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    style={{ ...body, fontWeight: 600, border: `1px solid ${C.coral}`, color: C.coral }}>
+                    {sendingReview ? <><Loader2 size={13} className="animate-spin" /> {t("id.reviewSending")}</> : t("id.reviewBtn")}
+                  </button>
                 </div>
               )}
 
@@ -4078,6 +4140,18 @@ function IDVerificationModal({ onClose, onVerified }) {
           <div className="text-center py-8">
             <Loader2 size={28} color={C.coral} className="mx-auto animate-spin" />
             <p style={{ ...body, fontSize: 13, color: C.mist, marginTop: 14 }}>{t("id.checking")}</p>
+          </div>
+        )}
+
+        {stage === "sent" && (
+          <div className="text-center py-4">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.lagoon }}>
+              <Check size={22} color="#fff" />
+            </div>
+            <p style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 17, marginTop: 12 }}>{t("id.reviewSentTitle")}</p>
+            <p style={{ ...body, color: C.mist, fontSize: 12.5, marginTop: 6, lineHeight: 1.6, maxWidth: 300, marginLeft: "auto", marginRight: "auto" }}>{t("id.reviewSentSub")}</p>
+            <button onClick={onClose} className="w-full mt-6 py-2.5 rounded-xl text-sm"
+              style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>{t("id.reviewClose")}</button>
           </div>
         )}
 
@@ -5640,6 +5714,7 @@ function AdminDashboard() {
             </div>
           )}
 
+          <AdminLicenceReviews />
           <AdminProfileChanges />
 
           {loading ? (
@@ -6138,6 +6213,76 @@ function SupplierProfileModal({ onClose }) {
 
 // Admin: profile edits that verified suppliers have asked for. The supplier's
 // live details change only when the admin approves.
+function AdminLicenceReviews() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const load = () => {
+    sbRpc("list_pending_licence_reviews", {}, accessToken)
+      .then((r) => setRows(r || []))
+      .catch(() => setRows([])); // not installed yet, or not an admin: show nothing
+  };
+  useEffect(() => { if (accessToken) load(); }, [!!accessToken]);
+  const run = async (fn, args, id) => {
+    setBusy(id); setError("");
+    try { await sbRpc(fn, args, accessToken); setRejecting(null); setReason(""); load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(null); }
+  };
+  const viewPhoto = async (r) => {
+    setError("");
+    try { window.open(await sbGetSignedUrl(KYC_DOCUMENTS_BUCKET, r.photo_path, accessToken, 300), "_blank", "noopener"); }
+    catch (e) { setError(e.message); }
+  };
+  if (rows.length === 0 && !error) return null;
+  return (
+    <div className="mt-5">
+      <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t("supplier.adminLicenceHeading")} ({rows.length})</h3>
+      <p style={{ ...body, fontSize: 11, color: C.mist, opacity: 0.6, marginBottom: 8 }}>{t("supplier.adminLicenceCompare")}</p>
+      {error && <div className="rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}><span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{error}</span></div>}
+      <div className="flex flex-col gap-3">
+        {rows.map((r) => (
+          <div key={r.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}` }}>
+            <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 14 }}>{r.full_name}</div>
+            <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 2 }}>{fmtTimestampShort(r.created_at)}</div>
+            <div className="mt-2" style={{ ...body, fontSize: 12, color: C.mist, lineHeight: 1.6 }}>
+              <div>Licence no: <span style={{ color: C.sand, fontWeight: 600 }}>{r.license_number}</span></div>
+              <div>Country: <span style={{ color: C.sand, fontWeight: 600 }}>{r.license_country}</span></div>
+              <div>Expiry: <span style={{ color: C.sand, fontWeight: 600 }}>{fmtDateFull(r.license_expiry)}</span></div>
+              <div>Phone: <span style={{ color: C.sand, fontWeight: 600 }}>{r.phone}</span></div>
+            </div>
+            <button onClick={() => viewPhoto(r)} className="mt-2 px-3 py-1.5 rounded-full text-[11px]" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.sand }}>{t("supplier.adminLicenceViewPhoto")}</button>
+            {rejecting === r.id ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder={t("supplier.adminLicenceReason")}
+                  className="w-full rounded-lg px-3 py-2 text-xs outline-none" style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }} />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setRejecting(null); setReason(""); }} className="px-3 py-1.5 rounded-full text-[11px]" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>{t("supplier.adminLicenceCancel")}</button>
+                  <button disabled={busy === r.id || !reason.trim()} onClick={() => run("reject_licence_review", { target_id: r.id, reason: reason.trim() }, r.id)}
+                    className="px-3 py-1.5 rounded-full text-[11px] disabled:opacity-50" style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>{t("supplier.adminLicenceConfirmReject")}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2 mt-3">
+                <button disabled={busy === r.id} onClick={() => run("approve_licence_review", { target_id: r.id }, r.id)}
+                  className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-40" style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
+                  {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t("supplier.adminLicenceApprove")}
+                </button>
+                <button disabled={busy === r.id} onClick={() => { setRejecting(r.id); setReason(""); }}
+                  className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>{t("supplier.adminLicenceReject")}</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AdminProfileChanges() {
   const { t } = useLang();
   const { accessToken } = useAuth();
