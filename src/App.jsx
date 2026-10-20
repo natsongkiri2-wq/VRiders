@@ -636,9 +636,15 @@ const STRINGS = {
       dashboardLabel: "SUPPLIER DASHBOARD",
       welcomeBack: "Welcome back, {supplier}",
       editProfile: "Edit profile", profileTitle: "Your supplier profile",
-      profileIntro: "Renters see your business name and use this phone number to call or WhatsApp you about bookings.",
+      profileIntro: "Renters see your business name and use this phone number to call or WhatsApp you about bookings. Changes are checked by Terima Rides before they go live.",
       profileBusinessName: "Business name", profileContactName: "Contact person", profilePhone: "Phone / WhatsApp", profileEmail: "Contact email",
-      profilePhoneHint: "Include the country code, e.g. +678 711 6413", profileSave: "Save changes", profileCancel: "Cancel",
+      profilePhoneHint: "Include the country code, e.g. +678 711 6413", profileSave: "Send for approval", profileCancel: "Cancel",
+      profileSent: "Sent for approval", profileSentBody: "We'll review your changes. Your current details stay live until they're approved.",
+      profilePendingBanner: "Your profile changes are waiting for approval. Your current details stay live until then.",
+      profileRejectedBanner: "Your last profile change was not approved: {note}",
+      profileDone: "Done", profileNoChange: "Nothing to change yet. Edit a field first.",
+      adminChangesHeading: "Profile changes awaiting approval", adminChangeApprove: "Approve", adminChangeReject: "Reject",
+      adminChangeReason: "Reason for rejecting (required)", adminChangeConfirmReject: "Confirm reject", adminChangeRequested: "Requested",
       profileInvalid: "Please fill in every field. The phone needs at least 7 digits and the email must be valid.",
 
       justAdded: "{name} is live and pending verification — it'll show up for customers shortly.",
@@ -986,9 +992,15 @@ const STRINGS = {
       dashboardLabel: "TABLEAU DE BORD LOUEUR",
       welcomeBack: "Bon retour, {supplier}",
       editProfile: "Modifier le profil", profileTitle: "Votre profil de loueur",
-      profileIntro: "Les clients voient le nom de votre entreprise et utilisent ce numéro pour vous appeler ou vous écrire sur WhatsApp au sujet des réservations.",
+      profileIntro: "Les clients voient le nom de votre entreprise et utilisent ce numéro pour vous appeler ou vous écrire sur WhatsApp au sujet des réservations. Les modifications sont vérifiées par Terima Rides avant d'être publiées.",
       profileBusinessName: "Nom de l'entreprise", profileContactName: "Personne de contact", profilePhone: "Téléphone / WhatsApp", profileEmail: "E-mail de contact",
-      profilePhoneHint: "Avec l'indicatif du pays, par ex. +678 711 6413", profileSave: "Enregistrer", profileCancel: "Annuler",
+      profilePhoneHint: "Avec l'indicatif du pays, par ex. +678 711 6413", profileSave: "Envoyer pour validation", profileCancel: "Annuler",
+      profileSent: "Envoyé pour validation", profileSentBody: "Nous allons examiner vos modifications. Vos informations actuelles restent en ligne jusqu'à leur validation.",
+      profilePendingBanner: "Vos modifications de profil sont en attente de validation. Vos informations actuelles restent en ligne d'ici là.",
+      profileRejectedBanner: "Votre dernière modification de profil n'a pas été validée : {note}",
+      profileDone: "Terminé", profileNoChange: "Rien à modifier pour l'instant. Modifiez d'abord un champ.",
+      adminChangesHeading: "Modifications de profil à valider", adminChangeApprove: "Valider", adminChangeReject: "Refuser",
+      adminChangeReason: "Motif du refus (obligatoire)", adminChangeConfirmReject: "Confirmer le refus", adminChangeRequested: "Demandé",
       profileInvalid: "Remplissez tous les champs. Le téléphone doit avoir au moins 7 chiffres et l'e-mail doit être valide.",
 
       justAdded: "{name} est en ligne et en attente de vérification — il apparaîtra bientôt pour les clients.",
@@ -1708,28 +1720,19 @@ function SupplierAuthProvider({ children }) {
     setStatus("pending");
   };
 
-  // Lets a verified supplier edit their own contact details. KYC fields and
-  // documents are not touched here (the database also blocks those).
-  const updateProfile = async (patch) => {
+  // A verified supplier's profile edits are not applied directly: they are sent
+  // as a request and an admin approves or rejects them. The live details stay
+  // as they are until then.
+  const requestProfileChange = async (v) => {
     if (!SUPABASE_CONFIGURED || !user || !profile || !profile.id) {
-      setProfile((p) => ({ ...p, ...patch }));
+      setProfile((p) => ({ ...p, pending_changes: v }));
       return;
     }
-    // Contact columns can't be read back through the public API, so ask only for
-    // the number of rows changed (Content-Range) instead of the updated rows.
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/suppliers?id=eq.${profile.id}`, {
-      method: "PATCH",
-      headers: { ...sbHeaders(accessToken), Prefer: "return=headers-only,count=exact" },
-      body: JSON.stringify(patch),
-    });
-    if (!res.ok) {
-      let msg = "";
-      try { msg = (await res.json()).message || ""; } catch (_) { /* ignore */ }
-      throw new Error(msg || "Could not save your changes.");
-    }
-    if (/\/0$/.test(res.headers.get("content-range") || "")) throw new Error("Could not save your changes.");
+    await sbRpc("request_profile_change", {
+      p_business_name: v.business_name, p_contact_name: v.contact_name, p_phone: v.phone, p_email: v.email,
+    }, accessToken);
     const fresh = await sbRpc("get_my_supplier", {}, accessToken);
-    setProfile(fresh && fresh.id ? fresh : { ...profile, ...patch });
+    if (fresh && fresh.id) setProfile(fresh);
   };
 
   // Real KYC approval is an admin/service-role action, blocked from the client
@@ -1750,7 +1753,7 @@ function SupplierAuthProvider({ children }) {
   };
 
   return (
-    <SupplierAuthContext.Provider value={{ status, profile, submitApplication, simulateApproval, updateProfile, loadingSupplier, applyError }}>
+    <SupplierAuthContext.Provider value={{ status, profile, submitApplication, simulateApproval, requestProfileChange, loadingSupplier, applyError }}>
       {children}
     </SupplierAuthContext.Provider>
   );
@@ -5637,6 +5640,8 @@ function AdminDashboard() {
             </div>
           )}
 
+          <AdminProfileChanges />
+
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
           ) : pending.length === 0 ? (
@@ -6044,75 +6049,157 @@ function AdminInvoices() {
 
 function SupplierProfileModal({ onClose }) {
   const { t } = useLang();
-  const { profile, updateProfile } = useSupplierAuth();
-  const [form, setForm] = useState({
+  const { profile, requestProfileChange } = useSupplierAuth();
+  const pendingNow = (profile && profile.pending_changes) || {};
+  const current = {
     business_name: (profile && profile.business_name) || "",
     contact_name: (profile && profile.contact_name) || "",
     phone: (profile && profile.phone) || "",
     email: (profile && profile.email) || "",
-  });
+  };
+  const [form, setForm] = useState({ ...current, ...pendingNow });
   const [saving, setSaving] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const valid = form.business_name.trim().length >= 2 && form.contact_name.trim().length >= 2
     && form.phone.replace(/[^0-9]/g, "").length >= 7 && /^\S+@\S+\.\S+$/.test(form.email.trim());
+  const unchanged = Object.keys(current).every((k) => form[k].trim() === current[k]) && Object.keys(pendingNow).length === 0;
   const save = async () => {
     if (!valid) { setError(t("supplier.profileInvalid")); return; }
+    if (unchanged) { setError(t("supplier.profileNoChange")); return; }
     setSaving(true); setError("");
     try {
-      await updateProfile({
+      await requestProfileChange({
         business_name: form.business_name.trim(), contact_name: form.contact_name.trim(),
         phone: form.phone.trim(), email: form.email.trim(),
       });
-      onClose();
+      setSent(true);
     } catch (e) {
       setError(e.message);
+    } finally {
       setSaving(false);
     }
   };
+  const field = (k, label, extra) => (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <input type={k === "phone" ? "tel" : k === "email" ? "email" : "text"} value={form[k]} onChange={(e) => set(k, e.target.value)} maxLength={k === "email" ? 120 : k === "phone" ? 30 : 80}
+        className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+      {extra}
+    </div>
+  );
   return (
     <div className="fixed inset-0 z-[65] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(9,17,15,0.75)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl p-6 max-h-[92vh] overflow-y-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
-        <div className="flex items-center justify-between mb-1">
-          <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{t("supplier.profileTitle")}</span>
-          <button onClick={onClose}><X size={18} color={C.mist} /></button>
-        </div>
-        <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7, marginBottom: 16, lineHeight: 1.5 }}>{t("supplier.profileIntro")}</p>
-        <div className="flex flex-col gap-3.5">
-          <div>
-            <FieldLabel>{t("supplier.profileBusinessName")}</FieldLabel>
-            <input value={form.business_name} onChange={(e) => set("business_name", e.target.value)} maxLength={80}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+        {sent ? (
+          <div className="text-center py-3">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.lagoon }}><Check size={22} color="#fff" /></div>
+            <p style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 17, marginTop: 12 }}>{t("supplier.profileSent")}</p>
+            <p style={{ ...body, color: C.mist, fontSize: 12.5, marginTop: 8, lineHeight: 1.6 }}>{t("supplier.profileSentBody")}</p>
+            <button onClick={onClose} className="w-full mt-5 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>{t("supplier.profileDone")}</button>
           </div>
-          <div>
-            <FieldLabel>{t("supplier.profileContactName")}</FieldLabel>
-            <input value={form.contact_name} onChange={(e) => set("contact_name", e.target.value)} maxLength={80}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
-          </div>
-          <div>
-            <FieldLabel>{t("supplier.profilePhone")}</FieldLabel>
-            <input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} maxLength={30}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
-            <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4 }}>{t("supplier.profilePhoneHint")}</p>
-          </div>
-          <div>
-            <FieldLabel>{t("supplier.profileEmail")}</FieldLabel>
-            <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} maxLength={120}
-              className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
-          </div>
-        </div>
-        {error && (
-          <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
-            <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{error}</span>
-          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-1">
+              <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 16 }}>{t("supplier.profileTitle")}</span>
+              <button onClick={onClose}><X size={18} color={C.mist} /></button>
+            </div>
+            <p style={{ ...body, fontSize: 12, color: C.mist, opacity: 0.7, marginBottom: 12, lineHeight: 1.5 }}>{t("supplier.profileIntro")}</p>
+            {Object.keys(pendingNow).length > 0 && (
+              <div className="rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: "rgba(229,106,62,0.15)" }}>
+                <span style={{ ...body, fontSize: 11.5, color: C.coralSoft }}>{t("supplier.profilePendingBanner")}</span>
+              </div>
+            )}
+            <div className="flex flex-col gap-3.5">
+              {field("business_name", t("supplier.profileBusinessName"))}
+              {field("contact_name", t("supplier.profileContactName"))}
+              {field("phone", t("supplier.profilePhone"), <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4 }}>{t("supplier.profilePhoneHint")}</p>)}
+              {field("email", t("supplier.profileEmail"))}
+            </div>
+            {error && (
+              <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
+                <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{error}</span>
+              </div>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>{t("supplier.profileCancel")}</button>
+              <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
+                {saving ? <Loader2 size={14} className="animate-spin" /> : t("supplier.profileSave")}
+              </button>
+            </div>
+          </>
         )}
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>{t("supplier.profileCancel")}</button>
-          <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : t("supplier.profileSave")}
-          </button>
-        </div>
+      </div>
+    </div>
+  );
+}
+
+// Admin: profile edits that verified suppliers have asked for. The supplier's
+// live details change only when the admin approves.
+function AdminProfileChanges() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const load = () => {
+    sbRpc("list_pending_profile_changes", {}, accessToken)
+      .then((r) => setRows(r || []))
+      .catch(() => setRows([])); // not installed yet, or not an admin: show nothing
+  };
+  useEffect(() => { if (accessToken) load(); }, [!!accessToken]);
+  const run = async (fn, args, id) => {
+    setBusy(id); setError("");
+    try { await sbRpc(fn, args, accessToken); setRejecting(null); setReason(""); load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(null); }
+  };
+  if (rows.length === 0 && !error) return null;
+  const labels = { business_name: t("supplier.profileBusinessName"), contact_name: t("supplier.profileContactName"), phone: t("supplier.profilePhone"), email: t("supplier.profileEmail") };
+  return (
+    <div className="mt-5">
+      <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{t("supplier.adminChangesHeading")} ({rows.length})</h3>
+      {error && <div className="rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}><span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{error}</span></div>}
+      <div className="flex flex-col gap-3">
+        {rows.map((r) => (
+          <div key={r.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}` }}>
+            <div style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 14 }}>{r.business_name}</div>
+            <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 2 }}>{t("supplier.adminChangeRequested")} {fmtTimestampShort(r.pending_changes_at)}</div>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {Object.entries(r.pending_changes || {}).map(([k, v]) => (
+                <div key={k} style={{ ...body, fontSize: 12, color: C.mist, lineHeight: 1.5 }}>
+                  <span style={{ opacity: 0.65 }}>{labels[k] || k}: </span>
+                  <span style={{ textDecoration: "line-through", opacity: 0.55 }}>{r[k] || "—"}</span>
+                  <span style={{ color: C.sand, fontWeight: 600 }}> → {String(v)}</span>
+                </div>
+              ))}
+            </div>
+            {rejecting === r.id ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder={t("supplier.adminChangeReason")}
+                  className="w-full rounded-lg px-3 py-2 text-xs outline-none" style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }} />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setRejecting(null); setReason(""); }} className="px-3 py-1.5 rounded-full text-[11px]" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>{t("supplier.profileCancel")}</button>
+                  <button disabled={busy === r.id || !reason.trim()} onClick={() => run("reject_profile_change", { target_id: r.id, reason: reason.trim() }, r.id)}
+                    className="px-3 py-1.5 rounded-full text-[11px] disabled:opacity-50" style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>{t("supplier.adminChangeConfirmReject")}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2 mt-3">
+                <button disabled={busy === r.id} onClick={() => run("approve_profile_change", { target_id: r.id }, r.id)}
+                  className="flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 disabled:opacity-40" style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
+                  {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t("supplier.adminChangeApprove")}
+                </button>
+                <button disabled={busy === r.id} onClick={() => { setRejecting(r.id); setReason(""); }}
+                  className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>{t("supplier.adminChangeReject")}</button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -6621,6 +6708,16 @@ function SupplierDashboard({ onOpenAuth }) {
         </button>
       </div>
       {showProfile && <SupplierProfileModal onClose={() => setShowProfile(false)} />}
+      {profile && profile.pending_changes && (
+        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(229,106,62,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.coralSoft }}>{t("supplier.profilePendingBanner")}</span>
+        </div>
+      )}
+      {profile && !profile.pending_changes && profile.profile_change_note && (
+        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("supplier.profileRejectedBanner", { note: profile.profile_change_note })}</span>
+        </div>
+      )}
 
       {vehiclesError && (
         <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
