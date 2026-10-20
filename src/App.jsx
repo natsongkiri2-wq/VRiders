@@ -462,6 +462,9 @@ const STRINGS = {
       suppliersTab: "Suppliers", invoicesTab: "Invoices", disputesTab: "Disputes",
       disputesSubheading: "{n} open dispute(s) across all suppliers",
       disputesEmpty: "No disputes — nothing to see here.",
+      noOpenDisputes: "No open disputes.", resolvedDisputes: "Resolved disputes", disputesSearch: "Search by renter, supplier, vehicle or category", noMatch: "Nothing matches your search.",
+      listingsSearch: "Search by vehicle or supplier", filterAll: "All", filterActive: "Active",
+      invoicesActive: "Due & overdue", invoicesNoneActive: "Nothing waiting for payment.", invoicesPast: "Past invoices", invoicesSearch: "Search by supplier, vehicle, renter, date or payment ref",
       disputesLoadError: "Couldn't load disputes:",
       disputesOpenCount: "{n} open", disputesResolvedCount: "{n} resolved",
       listingsTab: "Listings", listingsEmpty: "No listings yet.",
@@ -833,6 +836,9 @@ const STRINGS = {
       disputesTab: "Litiges",
       disputesSubheading: "{n} litige(s) en cours, tous loueurs confondus",
       disputesEmpty: "Aucun litige — rien à signaler ici.",
+      noOpenDisputes: "Aucun litige ouvert.", resolvedDisputes: "Litiges résolus", disputesSearch: "Rechercher par client, loueur, véhicule ou catégorie", noMatch: "Aucun résultat.",
+      listingsSearch: "Rechercher par véhicule ou loueur", filterAll: "Toutes", filterActive: "Actives",
+      invoicesActive: "À payer et en retard", invoicesNoneActive: "Aucun paiement en attente.", invoicesPast: "Factures passées", invoicesSearch: "Rechercher par loueur, véhicule, client, date ou référence de paiement",
       disputesLoadError: "Impossible de charger les litiges :",
       disputesOpenCount: "{n} en cours", disputesResolvedCount: "{n} résolu(s)",
       listingsTab: "Annonces", listingsEmpty: "Aucune annonce pour l'instant.",
@@ -5927,12 +5933,40 @@ function AdminDashboard() {
 // on these — nobody at Terima Rides actually had a way to see them all.
 // Reuses the same DisputeCard the supplier dashboard uses, unfiltered by
 // supplier, with the supplier's name shown on each card for context.
+function ListFilter({ query, onQuery, placeholder, chips, chip, onChip }) {
+  return (
+    <div className="flex flex-col gap-2.5 mb-3">
+      <div className="relative">
+        <Search size={13} color={C.mist} style={{ position: "absolute", left: 11, top: 11, opacity: 0.6 }} />
+        <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder={placeholder}
+          className="w-full pl-8 pr-3 py-2 rounded-lg outline-none" style={{ ...inputStyle, fontSize: 12.5 }} />
+      </div>
+      {chips && (
+        <div className="flex gap-1.5 flex-wrap">
+          {chips.map(([k, label]) => (
+            <button key={k} onClick={() => onChip(k)} className="px-2.5 py-1 rounded-full text-[10.5px]"
+              style={{ ...body, fontWeight: 600, color: chip === k ? C.lagoon : C.mist, backgroundColor: chip === k ? "rgba(46,158,134,0.18)" : "transparent", border: `1px solid ${chip === k ? C.lagoon : C.line}` }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function matchesQuery(q, values) {
+  const needle = q.trim().toLowerCase();
+  return !needle || values.some((v) => String(v || "").toLowerCase().includes(needle));
+}
+
 function AdminDisputes() {
   const { t } = useLang();
   const { accessToken } = useAuth();
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [resolvedQuery, setResolvedQuery] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -6005,11 +6039,30 @@ function AdminDisputes() {
       ) : disputes.length === 0 ? (
         <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.disputesEmpty")}</div>
       ) : (
+        <>
         <div className="flex flex-col gap-2.5 mt-1">
-          {disputes.map((d) => (
+          {disputes.filter((d) => d.status === "open").length === 0 && (
+            <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("admin.noOpenDisputes")}</p>
+          )}
+          {disputes.filter((d) => d.status === "open").map((d) => (
             <DisputeCard key={d.id} d={d} onRespond={respond} onResolve={resolve} supplierName={d.supplier} />
           ))}
         </div>
+        {resolvedCount > 0 && (
+          <div className="mt-8">
+            <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{t("admin.resolvedDisputes")}</h3>
+            <ListFilter query={resolvedQuery} onQuery={setResolvedQuery} placeholder={t("admin.disputesSearch")} />
+            <div className="flex flex-col gap-2.5">
+              {(() => {
+                const list = disputes.filter((d) => d.status !== "open" && matchesQuery(resolvedQuery, [d.vehicle, d.supplier, d.customer, d.category, d.description]));
+                return list.length === 0
+                  ? <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("admin.noMatch")}</p>
+                  : list.map((d) => <DisputeCard key={d.id} d={d} onRespond={respond} onResolve={resolve} supplierName={d.supplier} />);
+              })()}
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
@@ -6027,6 +6080,8 @@ function AdminListings() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [lQuery, setLQuery] = useState("");
+  const [lStatus, setLStatus] = useState("all");
 
   const load = () => {
     setLoading(true);
@@ -6076,7 +6131,12 @@ function AdminListings() {
         <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.listingsEmpty")}</div>
       ) : (
         <div className="flex flex-col gap-2.5 mt-3">
-          {listings.map((l) => {
+          <ListFilter query={lQuery} onQuery={setLQuery} placeholder={t("admin.listingsSearch")}
+            chips={[["all", t("admin.filterAll")], ["active", t("admin.filterActive")], ["suspended", t("admin.listingSuspended")]]} chip={lStatus} onChip={setLStatus} />
+          {listings.filter((l) => (lStatus === "all" || (lStatus === "active" ? l.isActive : !l.isActive)) && matchesQuery(lQuery, [l.name, l.supplier, l.type])).length === 0 && (
+            <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("admin.noMatch")}</p>
+          )}
+          {listings.filter((l) => (lStatus === "all" || (lStatus === "active" ? l.isActive : !l.isActive)) && matchesQuery(lQuery, [l.name, l.supplier, l.type])).map((l) => {
             const meta = TYPE_META[l.type];
             const Icon = meta.icon;
             return (
@@ -6203,6 +6263,8 @@ function AdminInvoices() {
   const [genResult, setGenResult] = useState(null);
   const [genError, setGenError] = useState("");
   const [markingId, setMarkingId] = useState(null);
+  const [iQuery, setIQuery] = useState("");
+  const [iStatus, setIStatus] = useState("all");
 
   const load = () => {
     setLoading(true);
@@ -6332,10 +6394,31 @@ function AdminInvoices() {
       ) : invoices.length === 0 ? (
         <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("admin.invoicesEmpty")}</div>
       ) : (
-        <div className="flex flex-col gap-3 mt-5">
-          {invoices.map((inv) => (
-            <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} onUnpay={unpay} marking={markingId === inv.id} showSupplier />
-          ))}
+        <div className="mt-5">
+          <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{t("admin.invoicesActive")}</h3>
+          <div className="flex flex-col gap-3">
+            {invoices.filter((i) => i.status !== "paid" && i.status !== "waived").length === 0 && (
+              <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("admin.invoicesNoneActive")}</p>
+            )}
+            {invoices.filter((i) => i.status !== "paid" && i.status !== "waived").map((inv) => (
+              <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} onUnpay={unpay} marking={markingId === inv.id} showSupplier />
+            ))}
+          </div>
+
+          <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, margin: "28px 0 10px" }}>{t("admin.invoicesPast")}</h3>
+          <ListFilter query={iQuery} onQuery={setIQuery} placeholder={t("admin.invoicesSearch")}
+            chips={[["all", t("admin.filterAll")], ["paid", t("invoices.statusPaid")], ["waived", t("invoices.statusWaived")]]} chip={iStatus} onChip={setIStatus} />
+          <div className="flex flex-col gap-3">
+            {(() => {
+              const list = invoices.filter((i) => (i.status === "paid" || i.status === "waived") && (iStatus === "all" || i.status === iStatus)
+                && matchesQuery(iQuery, [i.supplierName, i.paymentRef, `${fmtDateShort(i.periodStart)} – ${fmtDateShort(i.periodEnd)}`, ...i.items.flatMap((it) => [it.vehicle, it.customer])]));
+              return list.length === 0
+                ? <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{invoices.some((i) => i.status === "paid" || i.status === "waived") ? t("admin.noMatch") : "—"}</p>
+                : list.map((inv) => (
+                  <InvoiceRow key={inv.id} inv={inv} onMarkPaid={markPaid} onWaive={waive} onUnwaive={unwaive} onUnpay={unpay} marking={markingId === inv.id} showSupplier />
+                ));
+            })()}
+          </div>
         </div>
       )}
     </div>
