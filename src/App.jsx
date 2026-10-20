@@ -5,7 +5,7 @@ import {
   Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp,
-  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil, Mail
+  ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil, Mail, Download
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -2134,6 +2134,9 @@ const FOOTER_TEXT = {
     privacy: "Privacy",
     cancellation: "Cancellation",
     contact: "Contact us",
+    install: "Install app",
+    installHintIos: "On iPhone: tap the Share button, then \"Add to Home Screen\".",
+    installHint: "Open your browser menu and choose \"Install app\" or \"Add to Home screen\".",
     rights: (year) => `© ${year} Terima Rides`,
   },
   fr: {
@@ -2142,6 +2145,9 @@ const FOOTER_TEXT = {
     privacy: "Confidentialité",
     cancellation: "Annulation",
     contact: "Nous contacter",
+    install: "Installer l'appli",
+    installHintIos: "Sur iPhone : touchez le bouton Partager, puis « Sur l'écran d'accueil ».",
+    installHint: "Ouvrez le menu de votre navigateur et choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
     rights: (year) => `© ${year} Terima Rides`,
   },
 };
@@ -2150,6 +2156,18 @@ function Footer({ onOpenLegal }) {
   const { lang } = useLang();
   const ft = FOOTER_TEXT[lang] || FOOTER_TEXT.en;
   const year = new Date().getFullYear();
+  const [showHint, setShowHint] = useState(false);
+  const installed = typeof window !== "undefined" && ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true);
+  const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const installApp = async () => {
+    const ev = typeof window !== "undefined" ? window.__installPrompt : null;
+    if (ev) {
+      try { ev.prompt(); await ev.userChoice; } catch (e) { /* ignore */ }
+      window.__installPrompt = null;
+    } else {
+      setShowHint((v) => !v);
+    }
+  };
   return (
     <div className="mt-auto" style={{ borderTop: `1px solid ${C.line}` }}>
       <div className="max-w-5xl mx-auto px-5 md:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -2166,8 +2184,18 @@ function Footer({ onOpenLegal }) {
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-xs flex items-center gap-1" style={{ ...body, color: C.mist, opacity: 0.75 }}>
             <Mail size={11} /> {ft.contact}
           </a>
+          {!installed && (
+            <button onClick={installApp} className="text-xs flex items-center gap-1" style={{ ...body, color: C.sand, fontWeight: 600 }}>
+              <Download size={11} /> {ft.install}
+            </button>
+          )}
         </div>
       </div>
+      {showHint && !installed && (
+        <p className="max-w-5xl mx-auto px-5 md:px-10 pb-4 text-xs text-center sm:text-right" style={{ ...body, color: C.mist, opacity: 0.8 }}>
+          {isIos ? ft.installHintIos : ft.installHint}
+        </p>
+      )}
     </div>
   );
 }

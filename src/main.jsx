@@ -10,6 +10,14 @@ import "./index.css";
 inject();
 installGlobalErrorHandlers();
 
+// Let the footer "Install app" button trigger the browser's install prompt,
+// and register the small service worker that makes the app installable.
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); window.__installPrompt = e; });
+window.addEventListener("appinstalled", () => { window.__installPrompt = null; });
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}
+
 // Last-resort safety net: if the React tree crashes, report it and show a
 // plain reload prompt instead of a blank white screen.
 class ErrorBoundary extends React.Component {
