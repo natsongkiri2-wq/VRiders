@@ -663,6 +663,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       confirmRequest: "Confirm",
       declineRequest: "Decline",
+      declineConfirm: "Decline this request? The renter will be told it was declined.", declineYes: "Yes, decline", declineKeep: "Keep",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
       depositOverdue: "{duration} overdue", overdueDepositsBanner: "{n} deposit(s) past the 48-hour refund window — your customers can already see this as overdue.",
@@ -1032,6 +1033,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       confirmRequest: "Confirmer",
       declineRequest: "Refuser",
+      declineConfirm: "Refuser cette demande ? Le client sera informé du refus.", declineYes: "Oui, refuser", declineKeep: "Garder",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
       depositOverdue: "en retard de {duration}", overdueDepositsBanner: "{n} caution(s) au-delà du délai de 48 heures — vos clients le voient déjà comme en retard.",
@@ -6867,6 +6869,7 @@ function SupplierDashboard({ onOpenAuth }) {
   // refund here, just a status flip the customer sees immediately.
   const [cancellingId, setCancellingId] = useState(null);
   const [cancelFormId, setCancelFormId] = useState(null);
+  const [declineConfirmId, setDeclineConfirmId] = useState(null);
   const cancelBookingBySupplier = async (id) => {
     if (!usingRealData) return;
     setCancellingId(id);
@@ -7157,9 +7160,22 @@ function SupplierDashboard({ onOpenAuth }) {
                     <button onClick={() => act(r.id, "accepted")} className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5" style={{ ...body, fontWeight: 600, backgroundColor: C.lagoon, color: "#fff" }}>
                       <Check size={13} color="#fff" /> {t("supplier.confirmRequest")}
                     </button>
-                    <button onClick={() => act(r.id, "declined")} className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                    <button onClick={() => setDeclineConfirmId(r.id)} className="flex-1 py-2 rounded-lg text-[12px] flex items-center justify-center gap-1.5" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
                       <X size={13} color={C.mist} /> {t("supplier.declineRequest")}
                     </button>
+                  </div>
+                )}
+                {r.status === "pending" && declineConfirmId === r.id && (
+                  <div className="rounded-lg p-3 mt-2.5" style={{ backgroundColor: C.void, border: `1px solid ${C.hibiscus}` }}>
+                    <p style={{ ...body, fontSize: 11.5, color: C.sand, lineHeight: 1.5 }}>{t("supplier.declineConfirm")}</p>
+                    <div className="flex gap-2 mt-2.5">
+                      <button onClick={() => setDeclineConfirmId(null)} className="flex-1 py-1.5 rounded-lg text-[11px]" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                        {t("supplier.declineKeep")}
+                      </button>
+                      <button onClick={() => { setDeclineConfirmId(null); act(r.id, "declined"); }} className="flex-1 py-1.5 rounded-lg text-[11px]" style={{ ...body, fontWeight: 600, backgroundColor: C.hibiscus, color: "#fff" }}>
+                        {t("supplier.declineYes")}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {custDigits && (
