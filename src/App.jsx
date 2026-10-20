@@ -424,7 +424,8 @@ const STRINGS = {
     header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "Licence on file", myBookings: "My bookings" },
     mybookings: {
       heading: "My bookings", subheading: "Everything you've requested, in one place.",
-      empty: "No bookings yet — go find a vehicle.", browseBtn: "Browse vehicles",
+      empty: "No bookings yet — go find a vehicle.",
+      active: "Active bookings", noActive: "No active bookings right now.", past: "Past bookings", pastSearch: "Search by vehicle, supplier, date or reference", pastAll: "All", pastNoMatch: "No past bookings match.", browseBtn: "Browse vehicles",
       signInTitle: "Sign in to see your bookings", signInBody: "Your booking history and requests will show up here once you're signed in.",
       loadError: "Couldn't load your bookings:",
       viewPickup: "Pickup / return photos",
@@ -794,7 +795,8 @@ const STRINGS = {
     header: { renter: "Je loue", supplier: "Je suis loueur", verified: "Permis enregistré", myBookings: "Mes réservations" },
     mybookings: {
       heading: "Mes réservations", subheading: "Tout ce que vous avez demandé, au même endroit.",
-      empty: "Aucune réservation pour l'instant — trouvez un véhicule.", browseBtn: "Voir les véhicules",
+      empty: "Aucune réservation pour l'instant — trouvez un véhicule.",
+      active: "Réservations actives", noActive: "Aucune réservation active pour le moment.", past: "Réservations passées", pastSearch: "Rechercher par véhicule, loueur, date ou référence", pastAll: "Toutes", pastNoMatch: "Aucune réservation passée trouvée.", browseBtn: "Voir les véhicules",
       signInTitle: "Connectez-vous pour voir vos réservations", signInBody: "Votre historique de réservations apparaîtra ici une fois connecté.",
       loadError: "Impossible de charger vos réservations :",
       viewPickup: "Photos de départ / retour",
@@ -7598,6 +7600,8 @@ function MyBookings({ onResume }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pastQuery, setPastQuery] = useState("");
+  const [pastStatus, setPastStatus] = useState("all");
 
   const load = () => {
     if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
@@ -7634,36 +7638,15 @@ function MyBookings({ onResume }) {
   // list refreshes on its own, no manual refresh needed.
   useRealtimeRefresh("rental_bookings", user ? `customer_id=eq.${user.id}` : null, load);
 
-  if (!user) {
-    return (
-      <div className="max-w-md mx-auto px-5 py-24 text-center">
-        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
-          <Inbox size={22} color={C.mist} />
-        </div>
-        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 20, marginTop: 16 }}>{t("mybookings.signInTitle")}</h2>
-        <p style={{ ...body, color: C.mist, opacity: 0.75, fontSize: 13, marginTop: 10, lineHeight: 1.6 }}>{t("mybookings.signInBody")}</p>
-      </div>
-    );
-  }
+  const activeBookings = bookings.filter((b) => b.status === "pending" || b.status === "accepted");
+  const pastBookings = bookings.filter((b) => !(b.status === "pending" || b.status === "accepted"));
+  const pastNeedle = pastQuery.trim().toLowerCase();
+  const filteredPast = pastBookings.filter((b) =>
+    (pastStatus === "all" || b.status === pastStatus) &&
+    (!pastNeedle || [b.vehicle, b.supplier, b.dates, b.reference, b.status].some((v) => String(v || "").toLowerCase().includes(pastNeedle)))
+  );
 
-  return (
-    <div className="max-w-2xl mx-auto px-5 md:px-10 py-8">
-      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 24 }}>{t("mybookings.heading")}</h2>
-      <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.65, marginTop: 4 }}>{t("mybookings.subheading")}</p>
-
-      {error && (
-        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("mybookings.loadError")} {error}</span>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
-      ) : bookings.length === 0 ? (
-        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("mybookings.empty")}</div>
-      ) : (
-        <div className="flex flex-col gap-3 mt-6">
-          {bookings.map((b) => {
+  const renderBooking = (b) => {
             const digits = ["cancelled", "declined"].includes(b.status) ? "" : (b.supplierPhone || "").replace(/[^0-9]/g, "");
             const msg = encodeURIComponent(`Hi ${b.supplier}, checking in about my ${b.vehicle} booking (ref ${b.reference || b.id}).`);
             return (
@@ -7707,7 +7690,65 @@ function MyBookings({ onResume }) {
                 )}
               </div>
             );
-          })}
+  };
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto px-5 py-24 text-center">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+          <Inbox size={22} color={C.mist} />
+        </div>
+        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 20, marginTop: 16 }}>{t("mybookings.signInTitle")}</h2>
+        <p style={{ ...body, color: C.mist, opacity: 0.75, fontSize: 13, marginTop: 10, lineHeight: 1.6 }}>{t("mybookings.signInBody")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-5 md:px-10 py-8">
+      <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 24 }}>{t("mybookings.heading")}</h2>
+      <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.65, marginTop: 4 }}>{t("mybookings.subheading")}</p>
+
+      {error && (
+        <div className="rounded-lg px-3 py-2.5 mt-4" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("mybookings.loadError")} {error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 size={22} color={C.coralSoft} className="animate-spin" /></div>
+      ) : bookings.length === 0 ? (
+        <div className="text-center py-16" style={{ color: C.mist, opacity: 0.6 }}>{t("mybookings.empty")}</div>
+      ) : (
+        <div className="flex flex-col gap-3 mt-6">
+          <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("mybookings.active")}</h3>
+          {activeBookings.length === 0 && (
+            <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("mybookings.noActive")}</p>
+          )}
+          {activeBookings.map(renderBooking)}
+
+          <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginTop: 20 }}>{t("mybookings.past")}</h3>
+          <div className="relative">
+            <Search size={13} color={C.mist} style={{ position: "absolute", left: 11, top: 11, opacity: 0.6 }} />
+            <input
+              value={pastQuery} onChange={(e) => setPastQuery(e.target.value)}
+              placeholder={t("mybookings.pastSearch")}
+              className="w-full pl-8 pr-3 py-2 rounded-lg outline-none" style={{ ...inputStyle, fontSize: 12.5 }}
+            />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {["all", "completed", "declined", "cancelled"].map((k) => (
+              <button key={k} onClick={() => setPastStatus(k)}
+                className="px-2.5 py-1 rounded-full text-[10.5px]"
+                style={{ ...body, fontWeight: 600, color: pastStatus === k ? C.lagoon : C.mist, backgroundColor: pastStatus === k ? "rgba(46,158,134,0.18)" : "transparent", border: `1px solid ${pastStatus === k ? C.lagoon : C.line}` }}>
+                {k === "all" ? t("mybookings.pastAll") : bookingStatusLabel(t, k)}
+              </button>
+            ))}
+          </div>
+          {filteredPast.length === 0 && (
+            <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{pastBookings.length === 0 ? "—" : t("mybookings.pastNoMatch")}</p>
+          )}
+          {filteredPast.map(renderBooking)}
         </div>
       )}
     </div>
