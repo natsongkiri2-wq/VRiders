@@ -683,7 +683,8 @@ const STRINGS = {
       printBtn: "Print / Save as PDF", printInvoice: "INVOICE", printNumber: "Invoice no.", printSupplier: "Billed to", printFrom: "From",
       printPeriod: "Period", printDue: "Due date", printStatus: "Status", printRate: "Commission rate", printGross: "Gross bookings",
       printAmountDue: "Commission due", printNoLines: "No booking details available for this invoice.",
-      printPayNote: "Commission is charged on completed bookings only. To pay, or for payment details, contact bookings@terimarides.com or WhatsApp +678 711 6413 and quote the invoice number.",
+      printPayTitle: "How to pay", printAccName: "Account name", printAccNo: "Account number", printBank: "Bank", printPayRef: "Payment reference",
+      printPayNote: "Commission is charged on completed bookings only. Questions about this invoice: bookings@terimarides.com or WhatsApp +678 711 6413.",
       printPopupBlocked: "Allow pop-ups for this site to print the invoice.",
       waiveButton: "Waive", confirmWaive: "Confirm waive", undoWaive: "Undo waive",
       waiveReasonPlaceholder: "Reason (required), e.g. pilot offer: 2 months free",
@@ -1025,7 +1026,8 @@ const STRINGS = {
       printBtn: "Imprimer / Enregistrer en PDF", printInvoice: "FACTURE", printNumber: "Facture n°", printSupplier: "Facturé à", printFrom: "De",
       printPeriod: "Période", printDue: "Échéance", printStatus: "Statut", printRate: "Taux de commission", printGross: "Réservations (brut)",
       printAmountDue: "Commission due", printNoLines: "Aucun détail de réservation disponible pour cette facture.",
-      printPayNote: "La commission est facturée uniquement sur les réservations terminées. Pour payer, ou pour les coordonnées de paiement, écrivez à bookings@terimarides.com ou par WhatsApp au +678 711 6413 en indiquant le numéro de facture.",
+      printPayTitle: "Comment payer", printAccName: "Titulaire du compte", printAccNo: "Numéro de compte", printBank: "Banque", printPayRef: "Référence de paiement",
+      printPayNote: "La commission est facturée uniquement sur les réservations terminées. Questions sur cette facture : bookings@terimarides.com ou WhatsApp +678 711 6413.",
       printPopupBlocked: "Autorisez les pop-ups pour ce site afin d'imprimer la facture.",
       waiveButton: "Exonérer", confirmWaive: "Confirmer l'exonération", undoWaive: "Annuler l'exonération",
       waiveReasonPlaceholder: "Motif (obligatoire), ex. offre pilote : 2 mois gratuits",
@@ -4599,6 +4601,8 @@ function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, remov
 /* ---------------------------------- supplier dashboard ---------------------------------- */
 
 const COMMISSION_RATE = 0.08;
+// Where suppliers pay their commission invoices. Printed on the invoice while it is unpaid.
+const PAYMENT_DETAILS = { accountName: "Frank Natsong Kiri", accountNumber: "2022411", bank: "" };
 
 function invoiceGross(inv) {
   return inv.items.reduce((s, it) => s + it.gross, 0);
@@ -4685,6 +4689,7 @@ function printInvoice(inv, t, supplierName) {
 table{width:100%;border-collapse:collapse;margin-top:6px}th{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#555;text-align:left;border-bottom:1px solid #999;padding:6px 4px}
 td{padding:7px 4px;border-bottom:1px solid #ddd}.r{text-align:right;white-space:nowrap}th.r{text-align:right}.muted{color:#777}
 .tot{margin:16px 0 0 auto;width:280px}.tot div{display:flex;justify-content:space-between;padding:4px 0}.tot .big{border-top:2px solid #111;margin-top:6px;padding-top:8px;font-size:15px;font-weight:700}
+.pay{margin-top:22px;border:1px solid #111;border-radius:6px;padding:10px 14px;width:340px}.pay .row{display:flex;justify-content:space-between;padding:3px 0}.pay b.h{display:block;margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:1px}
 .note{margin-top:26px;color:#555;font-size:11px;line-height:1.5;border-top:1px solid #ddd;padding-top:10px}.badge{display:inline-block;border:1px solid #111;padding:1px 8px;border-radius:10px;font-size:11px}
 </style></head><body>
 <div class="top"><div class="brand">Terima Rides<small>terimarides.com · bookings@terimarides.com</small></div>
@@ -4699,6 +4704,11 @@ td{padding:7px 4px;border-bottom:1px solid #ddd}.r{text-align:right;white-space:
 <div><span>${esc(t("invoices.printRate"))}</span><span>${esc(Math.round(rate * 1000) / 10)}%</span></div>
 <div class="big"><span>${esc(t("invoices.printAmountDue"))}</span><span>${esc(fmtVUV(waived ? 0 : commission))} VUV</span></div></div>
 ${extra ? `<div class="note"><b>${esc(extra)}</b></div>` : ""}
+${!waived && inv.status !== "paid" ? `<div class="pay"><b class="h">${esc(t("invoices.printPayTitle"))}</b>
+<div class="row"><span>${esc(t("invoices.printAccName"))}</span><b>${esc(PAYMENT_DETAILS.accountName)}</b></div>
+<div class="row"><span>${esc(t("invoices.printAccNo"))}</span><b>${esc(PAYMENT_DETAILS.accountNumber)}</b></div>
+${PAYMENT_DETAILS.bank ? `<div class="row"><span>${esc(t("invoices.printBank"))}</span><b>${esc(PAYMENT_DETAILS.bank)}</b></div>` : ""}
+<div class="row"><span>${esc(t("invoices.printPayRef"))}</span><b>${esc(number)}</b></div></div>` : ""}
 <div class="note">${esc(t("invoices.printPayNote"))}</div>
 <script>window.onload=function(){setTimeout(function(){window.focus();window.print();},250)}<\/script></body></html>`;
   const w = window.open("", "_blank");
