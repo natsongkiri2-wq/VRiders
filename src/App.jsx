@@ -2,7 +2,7 @@ import { readLicencePhoto, matchLicence } from "./licenceOcr.js";
 import React, { useState, useMemo, useEffect, useRef, useContext, createContext } from "react";
 import {
   Car, Bike, Truck, Bus, Mountain, Zap, MapPin, Star, ShieldCheck, ShieldOff,
-  Phone, MessageCircle, X, Check, ChevronRight, ChevronLeft, Search,
+  Phone, MessageCircle, Printer, X, Check, ChevronRight, ChevronLeft, Search,
   Users, Fuel, Settings2, Plane, BadgeCheck, Plus, ArrowRight,
   LayoutGrid, SlidersHorizontal, Camera, Inbox, TrendingUp,
   ArrowLeft, Lock, ImagePlus, Clock, AlertTriangle, Flag, Loader2, CreditCard, Info, Map, Scale, Container, Pencil, Mail, Download
@@ -667,6 +667,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       confirmRequest: "Confirm",
       declineRequest: "Decline",
+      printRecords: "Print records", printTitleAll: "Booking records", printTitleStatus: "Booking records — {status}", printNoRows: "No bookings to print.", printVia: "Booked through Terima Rides", printGenerated: "Printed {date}", printColRef: "Ref", printColGuest: "Guest", printColDays: "Days", printColRate: "Rate/day", printColDeposit: "Deposit", printCompletedCount: "Completed bookings", printCompletedTotal: "Completed total", printNote: "Amounts are the rental price agreed when each booking was requested (rate per day × days). Payment is made directly between the guest and the fleet provider, so check against your own receipts.",
       pastBookings: "Past bookings", pastSearchPlaceholder: "Search by guest, vehicle or date", pastAll: "All", pastNoMatch: "No past bookings match.", noActiveRequests: "No new requests right now.",
       declineConfirm: "Decline this request? The renter will be told it was declined.", declineYes: "Yes, decline", declineKeep: "Keep",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
@@ -1042,6 +1043,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       confirmRequest: "Confirmer",
       declineRequest: "Refuser",
+      printRecords: "Imprimer", printTitleAll: "Registre des réservations", printTitleStatus: "Registre des réservations — {status}", printNoRows: "Aucune réservation à imprimer.", printVia: "Réservé via Terima Rides", printGenerated: "Imprimé le {date}", printColRef: "Réf.", printColGuest: "Client", printColDays: "Jours", printColRate: "Tarif/jour", printColDeposit: "Caution", printCompletedCount: "Réservations terminées", printCompletedTotal: "Total des terminées", printNote: "Les montants correspondent au prix de location convenu lors de la demande (tarif par jour × jours). Le paiement se fait directement entre le client et le fournisseur de flotte : vérifiez avec vos propres reçus.",
       pastBookings: "Réservations passées", pastSearchPlaceholder: "Rechercher par client, véhicule ou date", pastAll: "Toutes", pastNoMatch: "Aucune réservation passée trouvée.", noActiveRequests: "Aucune nouvelle demande pour le moment.",
       declineConfirm: "Refuser cette demande ? Le client sera informé du refus.", declineYes: "Oui, refuser", declineKeep: "Garder",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
@@ -5933,6 +5935,46 @@ function AdminDashboard() {
 // on these — nobody at Terima Rides actually had a way to see them all.
 // Reuses the same DisputeCard the supplier dashboard uses, unfiltered by
 // supplier, with the supplier's name shown on each card for context.
+function printBookingRecords(rows, t, businessName, title) {
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const calc = (r) => {
+    const nights = daysBetween(r.dateFrom, r.dateTo);
+    const rate = effectivePricePerDay(r.ratePerDay, r.rateTiers, nights);
+    return { nights, rate, amount: rate * nights };
+  };
+  const done = rows.filter((r) => r.status === "completed");
+  const totalAmount = done.reduce((sum, r) => sum + calc(r).amount, 0);
+  const lines = rows.length
+    ? rows.map((r) => {
+        const c = calc(r);
+        return `<tr><td>${esc(r.reference || "—")}</td><td>${esc(r.dates)}</td><td>${esc(r.vehicle)}</td><td>${esc(r.customer)}</td><td class="r">${c.nights}</td><td class="r">${esc(fmtVUV(c.rate))}</td><td class="r">${esc(fmtVUV(c.amount))}</td><td class="r">${esc(fmtVUV(r.depositAmount))}</td><td>${esc(bookingStatusLabel(t, r.status))}</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="9" class="muted">${esc(t("supplier.printNoRows"))}</td></tr>`;
+  const today = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+@page{size:A4 landscape;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #E56A3E;padding-bottom:10px;margin-bottom:14px}
+.brand{font-size:20px;font-weight:700}.brand small{display:block;font-size:11px;font-weight:400;color:#555;margin-top:2px}
+.ttl{text-align:right}.ttl h1{margin:0;font-size:18px}.ttl div{color:#555;margin-top:3px}
+table{width:100%;border-collapse:collapse}th{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:#555;text-align:left;border-bottom:1px solid #999;padding:6px 4px}
+td{padding:6px 4px;border-bottom:1px solid #ddd}.r{text-align:right;white-space:nowrap}th.r{text-align:right}.muted{color:#777}
+.sum{margin:14px 0 0 auto;width:300px}.sum div{display:flex;justify-content:space-between;padding:3px 0}.sum .big{border-top:2px solid #111;margin-top:5px;padding-top:7px;font-size:13px;font-weight:700}
+.note{margin-top:18px;color:#555;font-size:10px;line-height:1.5;border-top:1px solid #ddd;padding-top:8px}
+</style></head><body>
+<div class="top"><div class="brand">${esc(businessName || "—")}<small>${esc(t("supplier.printVia"))}</small></div>
+<div class="ttl"><h1>${esc(title)}</h1><div>${esc(t("supplier.printGenerated", { date: today }))}</div></div></div>
+<table><thead><tr><th>${esc(t("supplier.printColRef"))}</th><th>${esc(t("invoices.colDates"))}</th><th>${esc(t("invoices.colVehicle"))}</th><th>${esc(t("supplier.printColGuest"))}</th><th class="r">${esc(t("supplier.printColDays"))}</th><th class="r">${esc(t("supplier.printColRate"))}</th><th class="r">${esc(t("invoices.colAmount"))} (VUV)</th><th class="r">${esc(t("supplier.printColDeposit"))}</th><th>${esc(t("invoices.printStatus"))}</th></tr></thead><tbody>${lines}</tbody></table>
+<div class="sum"><div><span>${esc(t("supplier.printCompletedCount"))}</span><span>${done.length}</span></div>
+<div class="big"><span>${esc(t("supplier.printCompletedTotal"))}</span><span>${esc(fmtVUV(totalAmount))} VUV</span></div></div>
+<div class="note">${esc(t("supplier.printNote"))}</div>
+<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},250)}<\/script></body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(t("invoices.printPopupBlocked")); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
 function ListFilter({ query, onQuery, placeholder, chips, chip, onChip }) {
   return (
     <div className="flex flex-col gap-2.5 mb-3">
@@ -6796,7 +6838,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("rental_bookings", {
-        select: "id,status,date_from,date_to,vehicle_id,created_at,agreed_deposit_amount,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles:rental_vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,reference,date_from,date_to,vehicle_id,created_at,agreed_price_per_day,agreed_price_tiers,agreed_deposit_amount,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles:rental_vehicles(name,deposit_amount,price_per_day,price_tiers),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -6815,6 +6857,9 @@ function SupplierDashboard({ onOpenAuth }) {
           customer: (r.profiles && r.profiles.full_name) || "Customer",
           customerPhone: (r.profiles && r.profiles.phone) || "",
           customerId: r.customer_id,
+          reference: r.reference || "",
+          ratePerDay: (r.agreed_price_per_day ?? (r.vehicles && r.vehicles.price_per_day)) || 0,
+          rateTiers: r.agreed_price_tiers || (r.vehicles && r.vehicles.price_tiers) || [],
           depositAmount: (r.agreed_deposit_amount ?? (r.vehicles && r.vehicles.deposit_amount)) || 0,
           dateFrom: r.date_from,
           dateTo: r.date_to,
@@ -7454,7 +7499,7 @@ function SupplierDashboard({ onOpenAuth }) {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        <Stat label={t("supplier.activeListings")} value={myVehicles.filter((v) => v.isActive).length} icon={LayoutGrid} />
+        <Stat label={t("supplier.activeListings")} value={myVehicles.filter((v) => v.isActive && v.verified).length} icon={LayoutGrid} />
         <Stat label={t("supplier.pendingRequests")} value={reqs.filter((r) => r.status === "pending").length} icon={Inbox} />
         <Stat label={t("supplier.avgRating")} value={avgRating} icon={Star} />
         <Stat label={t("supplier.monthlyBookings")} value={monthlyBookingsCount} icon={TrendingUp} />
@@ -7473,7 +7518,16 @@ function SupplierDashboard({ onOpenAuth }) {
           </div>
 
           <div className="mt-8">
-            <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{t("supplier.pastBookings")}</h3>
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("supplier.pastBookings")}</h3>
+              <button
+                onClick={() => printBookingRecords(filteredPast, t, profile.business_name, pastStatus === "all" ? t("supplier.printTitleAll") : t("supplier.printTitleStatus", { status: bookingStatusLabel(t, pastStatus) }))}
+                disabled={filteredPast.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] disabled:opacity-40"
+                style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+                <Printer size={12} /> {t("supplier.printRecords")}
+              </button>
+            </div>
             <div className="relative mb-2.5">
               <Search size={13} color={C.mist} style={{ position: "absolute", left: 11, top: 11, opacity: 0.6 }} />
               <input
