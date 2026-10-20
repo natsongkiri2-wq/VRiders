@@ -604,6 +604,7 @@ const STRINGS = {
       verifiedTitle: "You're verified", verifiedSub: "This is saved to your account — you won't need to do this again, even on a different device. Let's get your booking sent.",
       continueBtn: "Continue to booking",
       expiredError: "This license appears to be expired — you'll need a valid, current license to book.",
+      dob: "Date of birth", dobNote: "Used only to check you are old enough to rent (21 or over).", tooYoung: "You must be 21 or over to rent a vehicle on Terima Rides.",
     },
     licence: {
       stepTitle: "Your driving licence",
@@ -622,6 +623,7 @@ const STRINGS = {
       rulePhotoBad: "No licence photo uploaded",
       ruleIdp: "Issued outside Vanuatu ({country}): ask to see the International Driving Permit too",
       ruleDup: "This licence number is also on another account",
+      ruleDobMissing: "Add your date of birth (tap Update details)", ruleAgeBad: "You must be 21 or over on the start date",
       panelTitle: "Licence check",
       panelOk: "Looks fine", panelWarn: "Check at pickup", panelBad: "Needs attention",
       panelNote: "Automatic check of what the renter entered. It does not confirm the licence with any official register, so still look at the physical licence at pickup.",
@@ -968,6 +970,7 @@ const STRINGS = {
       verifiedTitle: "Vous êtes vérifié", verifiedSub: "Enregistrée sur votre compte — vous n'aurez plus besoin de refaire cela, même sur un autre appareil. Passons à votre réservation.",
       continueBtn: "Continuer la réservation",
       expiredError: "Ce permis semble expiré — un permis valide est nécessaire pour réserver.",
+      dob: "Date de naissance", dobNote: "Utilisée uniquement pour vérifier que vous avez l'âge requis (21 ans ou plus).", tooYoung: "Vous devez avoir 21 ans ou plus pour louer un véhicule sur Terima Rides.",
     },
     licence: {
       stepTitle: "Votre permis de conduire",
@@ -986,6 +989,7 @@ const STRINGS = {
       rulePhotoBad: "Aucune photo du permis envoyée",
       ruleIdp: "Délivré hors du Vanuatu ({country}) : demandez aussi le permis international",
       ruleDup: "Ce numéro de permis figure aussi sur un autre compte",
+      ruleDobMissing: "Ajoutez votre date de naissance (touchez Modifier mes informations)", ruleAgeBad: "Vous devez avoir 21 ans ou plus à la date de début",
       panelTitle: "Contrôle du permis",
       panelOk: "Semble correct", panelWarn: "À vérifier au départ", panelBad: "À examiner",
       panelNote: "Contrôle automatique de ce que le client a saisi. Il ne confirme pas le permis auprès d'un registre officiel : regardez quand même le permis physique au départ.",
@@ -2736,6 +2740,14 @@ function ComparisonModal({ vehicles, onClose, onRemove, onBook }) {
 // Rules-only check of the licence details a renter entered. It cannot confirm
 // the licence with any official register; it flags things a person would
 // otherwise have to spot by eye. level: ok | warn | fail.
+// Whole years between a date of birth and an ISO date (both yyyy-mm-dd).
+function ageOn(dob, iso) {
+  const [by, bm, bd] = String(dob).split("-").map(Number);
+  const [y, m, d] = String(iso).split("-").map(Number);
+  return y - by - (m < bm || (m === bm && d < bd) ? 1 : 0);
+}
+const MIN_DRIVER_AGE = 21;
+
 function evaluateLicence(info, t) {
   const rules = [];
   const num = String(info.number || "").replace(/[^a-zA-Z0-9]/g, "");
@@ -2760,6 +2772,10 @@ function evaluateLicence(info, t) {
     : { id: "photo", level: "warn", text: t("licence.rulePhotoBad") });
   if (info.country && info.country !== "Vanuatu") rules.push({ id: "idp", level: "warn", text: t("licence.ruleIdp", { country: info.country }) });
   if (info.usedByOthers > 0) rules.push({ id: "dup", level: "fail", text: t("licence.ruleDup") });
+  if (info.dob !== undefined) {   // renter side only; the supplier panel does not receive a date of birth
+    if (!info.dob) rules.push({ id: "age", level: "fail", text: t("licence.ruleDobMissing") });
+    else if (ageOn(info.dob, info.dateFrom || daysFromNow(0)) < MIN_DRIVER_AGE) rules.push({ id: "age", level: "fail", text: t("licence.ruleAgeBad") });
+  }
   const overall = rules.some((r) => r.level === "fail") ? "fail" : rules.some((r) => r.level === "warn") ? "warn" : "ok";
   return { rules, overall };
 }
@@ -3477,13 +3493,13 @@ function BookingModal({ v, resumeBooking, onClose }) {
     if (!SUPABASE_CONFIGURED) { setLicence({ loading: false, info: null, reload: licence.reload }); return; }
     let cancelled = false;
     setLicence((l) => ({ ...l, loading: true }));
-    sbSelect("profiles", { select: "license_number,license_country,license_expiry,license_photo_url", query: `&id=eq.${user.id}`, accessToken })
+    sbSelect("profiles", { select: "license_number,license_country,license_expiry,license_photo_url,date_of_birth", query: `&id=eq.${user.id}`, accessToken })
       .then((rows) => {
         if (cancelled) return;
         const r = rows[0] || {};
         setLicence((l) => ({ ...l, loading: false, info: {
           number: r.license_number || "", country: r.license_country || "", expiry: r.license_expiry || "",
-          hasPhoto: !!r.license_photo_url, usedByOthers: 0, dateTo: dates.to,
+          hasPhoto: !!r.license_photo_url, usedByOthers: 0, dateTo: dates.to, dateFrom: dates.from, dob: r.date_of_birth || "",
         } }));
       })
       .catch(() => { if (!cancelled) setLicence((l) => ({ ...l, loading: false, info: null })); });
@@ -3897,7 +3913,7 @@ function IDVerificationModal({ onClose, onVerified }) {
   const { t } = useLang();
   const { user, accessToken } = useAuth();
   const [stage, setStage] = useState("form"); // form | checking | done
-  const [form, setForm] = useState({ fullName: "", phone: "", licenseNumber: "", country: "Vanuatu", expiry: "", photo: null });
+  const [form, setForm] = useState({ fullName: "", phone: "", licenseNumber: "", country: "Vanuatu", expiry: "", dob: "", photo: null });
   const [error, setError] = useState("");
   const [reviewable, setReviewable] = useState(false); // the automatic check rejected the photo: offer manual review
   const [sendingReview, setSendingReview] = useState(false);
@@ -3920,7 +3936,7 @@ function IDVerificationModal({ onClose, onVerified }) {
       await sbUploadFile(KYC_DOCUMENTS_BUCKET, path, form.photoFile, accessToken);
       await sbRpc("submit_licence_review", {
         p_full_name: form.fullName.trim(), p_phone: form.phone.trim(), p_license_number: form.licenseNumber.trim(),
-        p_country: form.country, p_expiry: form.expiry, p_photo_path: path,
+        p_country: form.country, p_expiry: form.expiry, p_date_of_birth: form.dob, p_photo_path: path,
       }, accessToken);
       setStage("sent");
     } catch (e) {
@@ -3930,7 +3946,7 @@ function IDVerificationModal({ onClose, onVerified }) {
   };
 
   const needsIDP = form.country !== "Vanuatu" && form.country !== "";
-  const valid = form.fullName.trim() && form.phone.trim() && form.licenseNumber.trim() && form.expiry && form.photo;
+  const valid = form.fullName.trim() && form.phone.trim() && form.licenseNumber.trim() && form.expiry && form.dob && form.photo;
 
   const [preparingPhoto, setPreparingPhoto] = useState(false);
 
@@ -3952,6 +3968,10 @@ function IDVerificationModal({ onClose, onVerified }) {
   const submit = async () => {
     if (form.expiry < daysFromNow(0)) {
       setError(t("id.expiredError"));
+      return;
+    }
+    if (ageOn(form.dob, daysFromNow(0)) < MIN_DRIVER_AGE) {
+      setError(t("id.tooYoung"));
       return;
     }
     setError("");
@@ -4003,6 +4023,7 @@ function IDVerificationModal({ onClose, onVerified }) {
         license_number: form.licenseNumber.trim(),
         license_country: form.country,
         license_expiry: form.expiry,
+        date_of_birth: form.dob,
         license_photo_url: licensePhotoPath,
         id_verified: true,
       }, accessToken);
@@ -4050,6 +4071,12 @@ function IDVerificationModal({ onClose, onVerified }) {
                   <input type="date" value={form.expiry} onChange={(e) => set("expiry", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
                 </div>
+              </div>
+              <div>
+                <FieldLabel>{t("id.dob")}</FieldLabel>
+                <input type="date" value={form.dob} max={daysFromNow(0)} onChange={(e) => set("dob", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg outline-none" style={inputStyle} />
+                <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 4, lineHeight: 1.4 }}>{t("id.dobNote")}</p>
               </div>
               <div>
                 <FieldLabel>{t("id.country")}</FieldLabel>
@@ -6343,6 +6370,7 @@ function AdminLicenceReviews() {
               <div>Licence no: <span style={{ color: C.sand, fontWeight: 600 }}>{r.license_number}</span></div>
               <div>Country: <span style={{ color: C.sand, fontWeight: 600 }}>{r.license_country}</span></div>
               <div>Expiry: <span style={{ color: C.sand, fontWeight: 600 }}>{fmtDateFull(r.license_expiry)}</span></div>
+              <div>Date of birth: <span style={{ color: C.sand, fontWeight: 600 }}>{r.date_of_birth ? fmtDateFull(r.date_of_birth) : "—"}</span></div>
               <div>Phone: <span style={{ color: C.sand, fontWeight: 600 }}>{r.phone}</span></div>
             </div>
             <button onClick={() => viewPhoto(r)} className="mt-2 px-3 py-1.5 rounded-full text-[11px]" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.sand }}>{t("supplier.adminLicenceViewPhoto")}</button>
