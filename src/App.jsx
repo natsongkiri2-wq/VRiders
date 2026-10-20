@@ -7004,7 +7004,7 @@ function SupplierDashboard({ onOpenAuth }) {
               <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
             )}
             {reqs.map((r) => {
-              const custDigits = (r.customerPhone || "").replace(/[^0-9]/g, "");
+              const custDigits = ["cancelled", "declined"].includes(r.status) ? "" : (r.customerPhone || "").replace(/[^0-9]/g, "");
               const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Terima Rides.`);
               // Same 48h window the customer's own deposit tracker uses —
               // until now only the customer could see when a deposit was
@@ -7482,7 +7482,7 @@ function MyBookings({ onResume }) {
       ) : (
         <div className="flex flex-col gap-3 mt-6">
           {bookings.map((b) => {
-            const digits = (b.supplierPhone || "").replace(/[^0-9]/g, "");
+            const digits = ["cancelled", "declined"].includes(b.status) ? "" : (b.supplierPhone || "").replace(/[^0-9]/g, "");
             const msg = encodeURIComponent(`Hi ${b.supplier}, checking in about my ${b.vehicle} booking (ref ${b.reference || b.id}).`);
             return (
               <div key={b.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
