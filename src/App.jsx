@@ -6582,7 +6582,7 @@ function SupplierDashboard({ onOpenAuth }) {
     setBookingsError("");
     Promise.all([
       sbSelect("rental_bookings", {
-        select: "id,status,date_from,date_to,vehicle_id,created_at,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles:rental_vehicles(name,deposit_amount),profiles(full_name,phone)",
+        select: "id,status,date_from,date_to,vehicle_id,created_at,agreed_deposit_amount,return_completed_at,deposit_refunded_at,deposit_refund_amount,deposit_deduction_reason,cancelled_by,cancelled_at,customer_id,pickup_note,return_note,vehicles:rental_vehicles(name,deposit_amount),profiles(full_name,phone)",
         query: `&supplier_id=eq.${profile.id}&order=created_at.desc`,
         accessToken,
       }),
@@ -6601,7 +6601,7 @@ function SupplierDashboard({ onOpenAuth }) {
           customer: (r.profiles && r.profiles.full_name) || "Customer",
           customerPhone: (r.profiles && r.profiles.phone) || "",
           customerId: r.customer_id,
-          depositAmount: (r.vehicles && r.vehicles.deposit_amount) || 0,
+          depositAmount: (r.agreed_deposit_amount ?? (r.vehicles && r.vehicles.deposit_amount)) || 0,
           dateFrom: r.date_from,
           dateTo: r.date_to,
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
@@ -7421,7 +7421,7 @@ function MyBookings({ onResume }) {
     if (!SUPABASE_CONFIGURED || !user) { setLoading(false); return; }
     setError("");
     sbSelect("rental_bookings", {
-      select: "id,status,date_from,date_to,reference,created_at,vehicles:rental_vehicles(id,name,type,deposit_amount),suppliers(business_name,phone)",
+      select: "id,status,date_from,date_to,reference,created_at,agreed_deposit_amount,vehicles:rental_vehicles(id,name,type,deposit_amount),suppliers(business_name,phone)",
       query: `&customer_id=eq.${user.id}&order=created_at.desc`,
       accessToken,
     })
@@ -7430,7 +7430,7 @@ function MyBookings({ onResume }) {
           id: r.id,
           vehicleId: r.vehicles && r.vehicles.id,
           vehicle: (r.vehicles && r.vehicles.name) || "—",
-          deposit: (r.vehicles && r.vehicles.deposit_amount) || 0,
+          deposit: (r.agreed_deposit_amount ?? (r.vehicles && r.vehicles.deposit_amount)) || 0,
           supplier: (r.suppliers && r.suppliers.business_name) || "—",
           supplierPhone: (r.suppliers && r.suppliers.phone) || "",
           dates: `${fmtDateShort(r.date_from)} – ${fmtDateShort(r.date_to)}`,
