@@ -663,6 +663,7 @@ const STRINGS = {
       bookingRequests: "Booking requests",
       confirmRequest: "Confirm",
       declineRequest: "Decline",
+      pastBookings: "Past bookings", pastSearchPlaceholder: "Search by guest, vehicle or date", pastAll: "All", pastNoMatch: "No past bookings match.", noActiveRequests: "No new requests right now.",
       declineConfirm: "Decline this request? The renter will be told it was declined.", declineYes: "Yes, decline", declineKeep: "Keep",
       rateGuest: "Rate this guest", ratedGuest: "You rated this guest",
       markDepositRefunded: "Mark deposit refunded", depositRefundedOn: "Deposit refunded on {date}",
@@ -1033,6 +1034,7 @@ const STRINGS = {
       bookingRequests: "Demandes de réservation",
       confirmRequest: "Confirmer",
       declineRequest: "Refuser",
+      pastBookings: "Réservations passées", pastSearchPlaceholder: "Rechercher par client, véhicule ou date", pastAll: "Toutes", pastNoMatch: "Aucune réservation passée trouvée.", noActiveRequests: "Aucune nouvelle demande pour le moment.",
       declineConfirm: "Refuser cette demande ? Le client sera informé du refus.", declineYes: "Oui, refuser", declineKeep: "Garder",
       rateGuest: "Évaluer ce client", ratedGuest: "Vous avez évalué ce client",
       markDepositRefunded: "Marquer la caution comme remboursée", depositRefundedOn: "Caution remboursée le {date}",
@@ -6870,6 +6872,8 @@ function SupplierDashboard({ onOpenAuth }) {
   const [cancellingId, setCancellingId] = useState(null);
   const [cancelFormId, setCancelFormId] = useState(null);
   const [declineConfirmId, setDeclineConfirmId] = useState(null);
+  const [pastQuery, setPastQuery] = useState("");
+  const [pastStatus, setPastStatus] = useState("all");
   const cancelBookingBySupplier = async (id) => {
     if (!usingRealData) return;
     setCancellingId(id);
@@ -7047,91 +7051,19 @@ function SupplierDashboard({ onOpenAuth }) {
     r.status === "accepted" && r.returnCompletedAt && r.depositAmount > 0 &&
     Date.now() - new Date(r.returnCompletedAt).getTime() - 48 * 3600000 > 0
   ).length;
+  const activeReqs = reqs.filter((r) => r.status === "pending" || r.status === "accepted");
+  const pastReqs = reqs.filter((r) => !(r.status === "pending" || r.status === "accepted"));
+  const pastNeedle = pastQuery.trim().toLowerCase();
+  const filteredPast = pastReqs.filter((r) =>
+    (pastStatus === "all" || r.status === pastStatus) &&
+    (!pastNeedle || [r.customer, r.vehicle, r.dates, r.status].some((v) => String(v || "").toLowerCase().includes(pastNeedle)))
+  );
 
   if (status !== "verified") {
     return <SupplierGate onOpenAuth={onOpenAuth} />;
   }
 
-  return (
-    <div className="max-w-5xl mx-auto px-5 md:px-10 py-8">
-      <div className="flex items-center gap-2">
-        <div style={{ ...mono, fontSize: 11, color: C.coralSoft, letterSpacing: "0.06em" }}>{t("supplier.dashboardLabel")}</div>
-        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
-          <BadgeCheck size={11} color={C.lagoon} />
-          <span style={{ ...body, fontSize: 9.5, fontWeight: 600, color: C.lagoon }}>{t("kyc.verifiedBadge")}</span>
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 4 }}>
-        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26 }}>
-          {t("supplier.welcomeBack", { supplier: (profile && profile.business_name) || "Vila 4x4 Rentals" })}
-        </h2>
-        <button onClick={() => setShowProfile(true)} className="px-3 py-1.5 rounded-full text-[11px] flex items-center gap-1.5"
-          style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
-          <Pencil size={11} /> {t("supplier.editProfile")}
-        </button>
-      </div>
-      {showProfile && <SupplierProfileModal onClose={() => setShowProfile(false)} />}
-      {profile && profile.pending_changes && (
-        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(229,106,62,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.coralSoft }}>{t("supplier.profilePendingBanner")}</span>
-        </div>
-      )}
-      {profile && !profile.pending_changes && profile.profile_change_note && (
-        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("supplier.profileRejectedBanner", { note: profile.profile_change_note })}</span>
-        </div>
-      )}
-
-      {vehiclesError && (
-        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{vehiclesError}</span>
-        </div>
-      )}
-      {bookingsError && (
-        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{bookingsError}</span>
-        </div>
-      )}
-      {disputesError && (
-        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
-          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{disputesError}</span>
-        </div>
-      )}
-      {overdueDepositCount > 0 && (
-        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)", border: `1px solid ${C.hibiscus}` }}>
-          <AlertTriangle size={15} color={C.hibiscus} />
-          <span style={{ ...body, fontSize: 13, color: C.sand }}>
-            {t("supplier.overdueDepositsBanner", { n: overdueDepositCount })}
-          </span>
-        </div>
-      )}
-
-      {justAdded && (
-        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ backgroundColor: "rgba(46,158,134,0.15)", border: `1px solid ${C.lagoon}` }}>
-          <Check size={15} color={C.lagoon} />
-          <span style={{ ...body, fontSize: 13, color: C.sand }}>
-            {t("supplier.justAdded", { name: justAdded })}
-          </span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        <Stat label={t("supplier.activeListings")} value={myVehicles.length} icon={LayoutGrid} />
-        <Stat label={t("supplier.pendingRequests")} value={reqs.filter((r) => r.status === "pending").length} icon={Inbox} />
-        <Stat label={t("supplier.avgRating")} value={avgRating} icon={Star} />
-        <Stat label={t("supplier.monthlyBookings")} value={monthlyBookingsCount} icon={TrendingUp} />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6 mt-8">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("supplier.bookingRequests")}</h3>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {reqs.length === 0 && !bookingsLoading && (
-              <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>—</p>
-            )}
-            {reqs.map((r) => {
+  const renderReq = (r) => {
               const custDigits = ["cancelled", "declined"].includes(r.status) ? "" : (r.customerPhone || "").replace(/[^0-9]/g, "");
               const custMsg = encodeURIComponent(`Hi ${r.customer}, this is ${profile.business_name} regarding your ${r.vehicle} booking (${r.dates}) via Terima Rides.`);
               // Same 48h window the customer's own deposit tracker uses —
@@ -7371,7 +7303,115 @@ function SupplierDashboard({ onOpenAuth }) {
                 )}
               </div>
               );
-            })}
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto px-5 md:px-10 py-8">
+      <div className="flex items-center gap-2">
+        <div style={{ ...mono, fontSize: 11, color: C.coralSoft, letterSpacing: "0.06em" }}>{t("supplier.dashboardLabel")}</div>
+        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(46,158,134,0.15)" }}>
+          <BadgeCheck size={11} color={C.lagoon} />
+          <span style={{ ...body, fontSize: 9.5, fontWeight: 600, color: C.lagoon }}>{t("kyc.verifiedBadge")}</span>
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 4 }}>
+        <h2 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 26 }}>
+          {t("supplier.welcomeBack", { supplier: (profile && profile.business_name) || "Vila 4x4 Rentals" })}
+        </h2>
+        <button onClick={() => setShowProfile(true)} className="px-3 py-1.5 rounded-full text-[11px] flex items-center gap-1.5"
+          style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
+          <Pencil size={11} /> {t("supplier.editProfile")}
+        </button>
+      </div>
+      {showProfile && <SupplierProfileModal onClose={() => setShowProfile(false)} />}
+      {profile && profile.pending_changes && (
+        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(229,106,62,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.coralSoft }}>{t("supplier.profilePendingBanner")}</span>
+        </div>
+      )}
+      {profile && !profile.pending_changes && profile.profile_change_note && (
+        <div className="rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{t("supplier.profileRejectedBanner", { note: profile.profile_change_note })}</span>
+        </div>
+      )}
+
+      {vehiclesError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{vehiclesError}</span>
+        </div>
+      )}
+      {bookingsError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{bookingsError}</span>
+        </div>
+      )}
+      {disputesError && (
+        <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}>
+          <span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{disputesError}</span>
+        </div>
+      )}
+      {overdueDepositCount > 0 && (
+        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.15)", border: `1px solid ${C.hibiscus}` }}>
+          <AlertTriangle size={15} color={C.hibiscus} />
+          <span style={{ ...body, fontSize: 13, color: C.sand }}>
+            {t("supplier.overdueDepositsBanner", { n: overdueDepositCount })}
+          </span>
+        </div>
+      )}
+
+      {justAdded && (
+        <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ backgroundColor: "rgba(46,158,134,0.15)", border: `1px solid ${C.lagoon}` }}>
+          <Check size={15} color={C.lagoon} />
+          <span style={{ ...body, fontSize: 13, color: C.sand }}>
+            {t("supplier.justAdded", { name: justAdded })}
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+        <Stat label={t("supplier.activeListings")} value={myVehicles.length} icon={LayoutGrid} />
+        <Stat label={t("supplier.pendingRequests")} value={reqs.filter((r) => r.status === "pending").length} icon={Inbox} />
+        <Stat label={t("supplier.avgRating")} value={avgRating} icon={Star} />
+        <Stat label={t("supplier.monthlyBookings")} value={monthlyBookingsCount} icon={TrendingUp} />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6 mt-8">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15 }}>{t("supplier.bookingRequests")}</h3>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {activeReqs.length === 0 && !bookingsLoading && (
+              <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("supplier.noActiveRequests")}</p>
+            )}
+            {activeReqs.map(renderReq)}
+          </div>
+
+          <div className="mt-8">
+            <h3 style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{t("supplier.pastBookings")}</h3>
+            <div className="relative mb-2.5">
+              <Search size={13} color={C.mist} style={{ position: "absolute", left: 11, top: 11, opacity: 0.6 }} />
+              <input
+                value={pastQuery} onChange={(e) => setPastQuery(e.target.value)}
+                placeholder={t("supplier.pastSearchPlaceholder")}
+                className="w-full pl-8 pr-3 py-2 rounded-lg outline-none" style={{ ...inputStyle, fontSize: 12.5 }}
+              />
+            </div>
+            <div className="flex gap-1.5 mb-3 flex-wrap">
+              {["all", "completed", "declined", "cancelled"].map((k) => (
+                <button key={k} onClick={() => setPastStatus(k)}
+                  className="px-2.5 py-1 rounded-full text-[10.5px]"
+                  style={{ ...body, fontWeight: 600, color: pastStatus === k ? C.lagoon : C.mist, backgroundColor: pastStatus === k ? "rgba(46,158,134,0.18)" : "transparent", border: `1px solid ${pastStatus === k ? C.lagoon : C.line}` }}>
+                  {k === "all" ? t("supplier.pastAll") : bookingStatusLabel(t, k)}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {filteredPast.length === 0 && !bookingsLoading && (
+                <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{pastReqs.length === 0 ? "—" : t("supplier.pastNoMatch")}</p>
+              )}
+              {filteredPast.map(renderReq)}
+            </div>
           </div>
 
           <div className="mt-6">
