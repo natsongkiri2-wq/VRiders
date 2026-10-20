@@ -4602,7 +4602,7 @@ function ManagePhotosModal({ vehicle, onClose, onAdd, onRemove, uploading, remov
 
 const COMMISSION_RATE = 0.08;
 // Where suppliers pay their commission invoices. Printed on the invoice while it is unpaid.
-const PAYMENT_DETAILS = { accountName: "Frank Natsong Kiri", accountNumber: "2022411", bank: "" };
+const PAYMENT_DETAILS = { accountName: "Frank Natsong Kiri", accountNumber: "2022411", bank: "ANZ Bank Vanuatu Ltd" };
 
 function invoiceGross(inv) {
   return inv.items.reduce((s, it) => s + it.gross, 0);
