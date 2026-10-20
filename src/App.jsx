@@ -464,6 +464,7 @@ const STRINGS = {
       disputesLoadError: "Couldn't load disputes:",
       disputesOpenCount: "{n} open", disputesResolvedCount: "{n} resolved",
       listingsTab: "Listings", listingsEmpty: "No listings yet.",
+      activityTab: "Activity", activitySearch: "Search a booking ref, ID or name", activityAll: "Everything", activityEmpty: "No activity recorded yet.", activityMore: "Load older", activityNote: "Automatic record of who changed what. It starts from when it was switched on.",
       listingsLoadError: "Couldn't load listings:",
       listingSuspended: "Suspended", suspendListing: "Suspend", reinstateListing: "Reinstate",
       generateInvoices: "Generate invoices for completed bookings",
@@ -826,6 +827,7 @@ const STRINGS = {
       disputesLoadError: "Impossible de charger les litiges :",
       disputesOpenCount: "{n} en cours", disputesResolvedCount: "{n} résolu(s)",
       listingsTab: "Annonces", listingsEmpty: "Aucune annonce pour l'instant.",
+      activityTab: "Activité", activitySearch: "Rechercher une réf., un ID ou un nom", activityAll: "Tout", activityEmpty: "Aucune activité enregistrée.", activityMore: "Charger plus ancien", activityNote: "Journal automatique des modifications. Il commence à son activation.",
       listingsLoadError: "Impossible de charger les annonces :",
       listingSuspended: "Suspendue", suspendListing: "Suspendre", reinstateListing: "Réactiver",
       suppliersTab: "Loueurs", invoicesTab: "Factures",
@@ -5693,6 +5695,10 @@ function AdminDashboard() {
           style={{ ...body, fontWeight: 600, backgroundColor: tab === "listings" ? C.coral : "transparent", color: tab === "listings" ? "#fff" : C.mist }}>
           {t("admin.listingsTab")}
         </button>
+        <button onClick={() => setTab("activity")} className="px-4 py-1.5 rounded-full text-xs"
+          style={{ ...body, fontWeight: 600, backgroundColor: tab === "activity" ? C.coral : "transparent", color: tab === "activity" ? "#fff" : C.mist }}>
+          {t("admin.activityTab")}
+        </button>
       </div>
 
       {tab === "invoices" ? (
@@ -5701,6 +5707,8 @@ function AdminDashboard() {
         <AdminDisputes />
       ) : tab === "listings" ? (
         <AdminListings />
+      ) : tab === "activity" ? (
+        <AdminActivity />
       ) : (
         <>
           {loadError && (
@@ -5968,6 +5976,88 @@ function AdminListings() {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+const AUDIT_ENTITIES = { rental_bookings: "Booking", invoices: "Invoice", suppliers: "Supplier", profiles: "Renter", disputes: "Dispute", licence_reviews: "Licence review" };
+const AUDIT_FIELDS = { status: "status", cancelled_by: "cancelled by", cancelled_at: "cancelled at", date_from: "from", date_to: "to", pickup_completed_at: "pickup done", return_completed_at: "return done", deposit_refunded_at: "deposit refunded", deposit_refund_amount: "refund", deposit_deduction_reason: "deduction reason", paid_at: "paid", waived_at: "waived", waive_reason: "waive reason", payment_reference: "payment ref", verified: "verified", business_name: "business name", contact_name: "contact", phone: "phone", email: "email", profile_change_note: "note", id_verified: "licence on file", license_number: "licence number", license_country: "licence country", license_expiry: "licence expiry", license_photo_url: "licence photo", resolution: "resolution", note: "note" };
+
+function auditValue(v) {
+  if (v === null || v === undefined || v === "") return "none";
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Pacific/Efate" });
+  return String(v);
+}
+
+function AdminActivity() {
+  const { t } = useLang();
+  const { accessToken } = useAuth();
+  const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState("");
+  const [entity, setEntity] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [more, setMore] = useState(false);
+  const [error, setError] = useState("");
+  const PAGE = 50;
+  const load = async (append) => {
+    setLoading(true); setError("");
+    try {
+      const r = await sbRpc("list_audit_log", {
+        p_search: search.trim() || null, p_entity: entity || null, p_limit: PAGE,
+        p_before: append && rows.length ? rows[rows.length - 1].at : null,
+      }, accessToken);
+      const got = r || [];
+      setRows(append ? [...rows, ...got] : got);
+      setMore(got.length === PAGE);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (accessToken) load(false); }, [!!accessToken, entity]);
+  const describe = (r) => {
+    const ch = (r.details && r.details.changes) || {};
+    const parts = Object.entries(ch).map(([k, v]) => {
+      const label = AUDIT_FIELDS[k] || k;
+      if (Array.isArray(v)) return `${label}: ${auditValue(v[0])} → ${auditValue(v[1])}`;
+      return v === "changed" ? `${label} changed` : `${label}: ${auditValue(v)}`;
+    });
+    return parts.join(" · ");
+  };
+  const who = (r) => r.actor_kind === "system" ? "System" : `${r.actor_name || "Unknown"}${r.actor_kind === "admin" ? " (admin)" : ""}`;
+  return (
+    <div className="mt-5">
+      <p style={{ ...body, fontSize: 11.5, color: C.mist, opacity: 0.6, marginBottom: 10 }}>{t("admin.activityNote")}</p>
+      <div className="flex gap-2 mb-3">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") load(false); }}
+          placeholder={t("admin.activitySearch")} className="flex-1 min-w-0 rounded-lg px-3 py-2 text-xs outline-none"
+          style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }} />
+        <select value={entity} onChange={(e) => setEntity(e.target.value)} className="rounded-lg px-2 py-2 text-xs outline-none" style={{ ...body, backgroundColor: C.panelSoft, border: `1px solid ${C.line}`, color: C.sand }}>
+          <option value="">{t("admin.activityAll")}</option>
+          {Object.entries(AUDIT_ENTITIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+      {error && <div className="rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: "rgba(217,82,122,0.15)" }}><span style={{ ...body, fontSize: 12, color: C.hibiscus }}>{error}</span></div>}
+      {!loading && !error && rows.length === 0 && <p style={{ ...body, fontSize: 12.5, color: C.mist, opacity: 0.6 }}>{t("admin.activityEmpty")}</p>}
+      <div className="flex flex-col gap-2">
+        {rows.map((r) => {
+          const ctx = (r.details && r.details.context) || {};
+          return (
+            <div key={r.id} className="rounded-xl px-3.5 py-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.line}` }}>
+              <div className="flex items-center justify-between gap-2">
+                <span style={{ ...display, color: C.sand, fontWeight: 700, fontSize: 12.5 }}>
+                  {AUDIT_ENTITIES[r.entity] || r.entity} · {r.action.replace("_", " ")}{ctx.reference ? ` · ${ctx.reference}` : ""}
+                </span>
+                <span style={{ ...mono, fontSize: 10, color: C.mist, opacity: 0.6, whiteSpace: "nowrap" }}>{auditValue(r.at)}</span>
+              </div>
+              <div style={{ ...body, fontSize: 11.5, color: C.mist, marginTop: 3, lineHeight: 1.5 }}>{describe(r)}</div>
+              <div style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.55, marginTop: 3 }}>by {who(r)} · id {String(r.entity_id).slice(0, 8)}</div>
+            </div>
+          );
+        })}
+      </div>
+      {loading && <Loader2 size={18} color={C.mist} className="animate-spin mx-auto mt-4" />}
+      {more && !loading && (
+        <button onClick={() => load(true)} className="w-full mt-3 py-2 rounded-lg text-xs" style={{ ...body, fontWeight: 600, border: `1px solid ${C.line}`, color: C.mist }}>{t("admin.activityMore")}</button>
       )}
     </div>
   );
