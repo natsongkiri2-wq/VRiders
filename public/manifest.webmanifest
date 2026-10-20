@@ -1,7 +1,7 @@
 {
   "name": "Terima Rides",
   "short_name": "Terima Rides",
-  "description": "Compare local vehicle rental providers in Port Vila and across Efate Island, and book directly.",
+  "description": "Compare local vehicle rental fleet providers in Port Vila and across Efate Island, and book directly.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
