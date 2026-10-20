@@ -7369,7 +7369,7 @@ function SupplierDashboard({ onOpenAuth }) {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        <Stat label={t("supplier.activeListings")} value={myVehicles.length} icon={LayoutGrid} />
+        <Stat label={t("supplier.activeListings")} value={myVehicles.filter((v) => v.isActive).length} icon={LayoutGrid} />
         <Stat label={t("supplier.pendingRequests")} value={reqs.filter((r) => r.status === "pending").length} icon={Inbox} />
         <Stat label={t("supplier.avgRating")} value={avgRating} icon={Star} />
         <Stat label={t("supplier.monthlyBookings")} value={monthlyBookingsCount} icon={TrendingUp} />
