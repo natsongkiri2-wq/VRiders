@@ -612,6 +612,7 @@ const STRINGS = {
       loading: "Checking your licence...",
       number: "Licence number", country: "Issued in", expiry: "Expires", photoOn: "Photo on file", photoOff: "No photo on file",
       update: "Update licence details",
+      dobQuick: "Add your date of birth to continue", dobSave: "Save date of birth", dobSaveFailed: "Could not save. Please try again.",
       continueBtn: "Looks right, continue",
       blocked: "Your licence can't be used for these dates. Update it to continue.",
       ruleNumberOk: "Licence number looks valid",
@@ -978,6 +979,7 @@ const STRINGS = {
       loading: "Vérification de votre permis...",
       number: "Numéro de permis", country: "Délivré en", expiry: "Expire le", photoOn: "Photo enregistrée", photoOff: "Aucune photo enregistrée",
       update: "Modifier mon permis",
+      dobQuick: "Ajoutez votre date de naissance pour continuer", dobSave: "Enregistrer la date de naissance", dobSaveFailed: "Enregistrement impossible. Réessayez.",
       continueBtn: "C'est correct, continuer",
       blocked: "Votre permis ne peut pas être utilisé pour ces dates. Mettez-le à jour pour continuer.",
       ruleNumberOk: "Le numéro de permis semble valide",
@@ -3266,6 +3268,20 @@ function BookingModal({ v, resumeBooking, onClose }) {
   const [step, setStep] = useState(resumeBooking ? 3 : 0);
   const [showLicenceForm, setShowLicenceForm] = useState(false);
   const [licence, setLicence] = useState({ loading: false, info: null, reload: 0 });
+  const [quickDob, setQuickDob] = useState({ value: "", saving: false, error: "" });
+  const saveQuickDob = async () => {
+    if (!quickDob.value) return;
+    if (ageOn(quickDob.value, daysFromNow(0)) < MIN_DRIVER_AGE) { setQuickDob((q) => ({ ...q, error: t("id.tooYoung") })); return; }
+    setQuickDob((q) => ({ ...q, saving: true, error: "" }));
+    try {
+      await sbUpdate("profiles", `id=eq.${user.id}`, { date_of_birth: quickDob.value }, accessToken);
+      setQuickDob({ value: "", saving: false, error: "" });
+      setLicence((l) => ({ ...l, reload: l.reload + 1 }));
+    } catch (e) {
+      console.error("Saving date of birth failed:", e.message);
+      setQuickDob((q) => ({ ...q, saving: false, error: t("licence.dobSaveFailed") }));
+    }
+  };
   const [agreed, setAgreed] = useState(false);
   const [dates, setDates] = useState({ from: "", to: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -3600,6 +3616,17 @@ function BookingModal({ v, resumeBooking, onClose }) {
             {!licence.loading && licenceResult && licenceResult.overall === "fail" && (
               <div className="rounded-lg px-3 py-2.5 mt-3" style={{ backgroundColor: "rgba(217,82,122,0.22)", border: "1px solid rgba(217,82,122,0.45)" }}>
                 <span style={{ ...body, fontSize: 12, fontWeight: 700, color: "#FFE3EB" }}>{t("licence.blocked")}</span>
+              </div>
+            )}
+            {!licence.loading && licence.info && licence.info.number && !licence.info.dob && (
+              <div className="rounded-xl p-3.5 mt-3" style={{ backgroundColor: C.panelSoft, border: `1px solid ${C.line}` }}>
+                <p style={{ ...body, fontSize: 12, fontWeight: 600, color: C.sand, marginBottom: 6 }}>{t("licence.dobQuick")}</p>
+                <input type="date" value={quickDob.value} max={daysFromNow(0)} onChange={(e) => setQuickDob((q) => ({ ...q, value: e.target.value, error: "" }))}
+                  className="w-full rounded-lg px-3 py-2 text-sm" style={{ ...body, backgroundColor: C.panel, border: `1px solid ${C.line}`, color: C.sand }} />
+                <p style={{ ...body, fontSize: 10.5, color: C.mist, opacity: 0.6, marginTop: 4 }}>{t("id.dobNote")}</p>
+                {quickDob.error && <p style={{ ...body, fontSize: 11.5, color: C.hibiscus, marginTop: 4 }}>{quickDob.error}</p>}
+                <button disabled={!quickDob.value || quickDob.saving} onClick={saveQuickDob} className="w-full mt-2 py-2 rounded-xl text-sm disabled:opacity-40"
+                  style={{ ...body, fontWeight: 600, backgroundColor: C.coral, color: "#fff" }}>{t("licence.dobSave")}</button>
               </div>
             )}
             <button onClick={() => setShowLicenceForm(true)} className="w-full mt-3 py-2 rounded-xl text-sm" style={{ ...body, fontWeight: 600, color: C.mist, border: `1px solid ${C.line}` }}>
