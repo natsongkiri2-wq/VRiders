@@ -421,11 +421,11 @@ const LANGS = [
 
 const STRINGS = {
   en: {
-    header: { renter: "I'm renting", supplier: "I'm a supplier", verified: "Licence on file", myBookings: "My bookings" },
+    header: { renter: "I'm renting", supplier: "I'm a fleet provider", verified: "Licence on file", myBookings: "My bookings" },
     mybookings: {
       heading: "My bookings", subheading: "Everything you've requested, in one place.",
       empty: "No bookings yet — go find a vehicle.",
-      active: "Active bookings", noActive: "No active bookings right now.", past: "Past bookings", pastSearch: "Search by vehicle, supplier, date or reference", pastAll: "All", pastNoMatch: "No past bookings match.", browseBtn: "Browse vehicles",
+      active: "Active bookings", noActive: "No active bookings right now.", past: "Past bookings", pastSearch: "Search by vehicle, provider, date or reference", pastAll: "All", pastNoMatch: "No past bookings match.", browseBtn: "Browse vehicles",
       signInTitle: "Sign in to see your bookings", signInBody: "Your booking history and requests will show up here once you're signed in.",
       loadError: "Couldn't load your bookings:",
       viewPickup: "Pickup / return photos",
@@ -451,7 +451,7 @@ const STRINGS = {
     },
     admin: {
       nav: "Admin",
-      heading: "Supplier approvals",
+      heading: "Provider approvals",
       subheading: "{n} application(s) waiting for review",
       empty: "Nothing waiting — all caught up.",
       approve: "Approve", reject: "Reject",
@@ -459,12 +459,12 @@ const STRINGS = {
       submittedOn: "Submitted {date}",
       loadError: "Couldn't load applications:",
       actionError: "Action failed:",
-      suppliersTab: "Suppliers", invoicesTab: "Invoices", disputesTab: "Disputes",
-      disputesSubheading: "{n} open dispute(s) across all suppliers",
+      suppliersTab: "Providers", invoicesTab: "Invoices", disputesTab: "Disputes",
+      disputesSubheading: "{n} open dispute(s) across all providers",
       disputesEmpty: "No disputes — nothing to see here.",
-      noOpenDisputes: "No open disputes.", resolvedDisputes: "Resolved disputes", disputesSearch: "Search by renter, supplier, vehicle or category", noMatch: "Nothing matches your search.",
-      listingsSearch: "Search by vehicle or supplier", filterAll: "All", filterActive: "Active",
-      invoicesActive: "Due & overdue", invoicesNoneActive: "Nothing waiting for payment.", invoicesPast: "Past invoices", invoicesSearch: "Search by supplier, vehicle, renter, date or payment ref",
+      noOpenDisputes: "No open disputes.", resolvedDisputes: "Resolved disputes", disputesSearch: "Search by renter, provider, vehicle or category", noMatch: "Nothing matches your search.",
+      listingsSearch: "Search by vehicle or provider", filterAll: "All", filterActive: "Active",
+      invoicesActive: "Due & overdue", invoicesNoneActive: "Nothing waiting for payment.", invoicesPast: "Past invoices", invoicesSearch: "Search by provider, vehicle, renter, date or payment ref",
       disputesLoadError: "Couldn't load disputes:",
       disputesOpenCount: "{n} open", disputesResolvedCount: "{n} resolved",
       listingsTab: "Listings", listingsEmpty: "No listings yet.",
@@ -478,13 +478,13 @@ const STRINGS = {
       markPaid: "Mark as paid", invoicesEmpty: "No invoices yet.",
       genError: "Couldn't generate invoices:",
       viewIdDoc: "View ID document", viewVehicleDoc: "View vehicle document",
-      noDocument: "This supplier hasn't uploaded that document yet.",
+      noDocument: "This provider hasn't uploaded that document yet.",
     },
     hero: {
       eyebrow: "PORT VILA · EFATE ISLAND",
       title: "Your all-in-one vehicle rental search.",
-      sub: "Compare local suppliers, see the deposit terms up front, and book — you pay the supplier directly, no middleman on your card.",
-      searchPlaceholder: "Search vehicles, suppliers, or areas...",
+      sub: "Compare local providers, see the deposit terms up front, and book — you pay the provider directly, no middleman on your card.",
+      searchPlaceholder: "Search vehicles, providers, or areas...",
       search: "Search",
     },
     filters: {
@@ -503,10 +503,10 @@ const STRINGS = {
       seats: "Seats", transmission: "Transmission", fuel: "Fuel", airportPickup: "Airport pickup",
       available: "Available", notOffered: "Not offered",
       depositTitle: "{amount} VUV refundable deposit", noDepositTitle: "No deposit required",
-      depositExplain: "Held by the supplier at pickup (cash or card hold) and refunded on return, minus any damage found in the joint condition check. Vanuatu rentals don't carry insurance — this deposit is the supplier's only cover.",
-      noDepositExplain: "This supplier doesn't require a deposit. There is still no insurance on this rental — you're responsible for any damage during your hire.",
+      depositExplain: "Held by the provider at pickup (cash or card hold) and refunded on return, minus any damage found in the joint condition check. Vanuatu rentals don't carry insurance — this deposit is the provider's only cover.",
+      noDepositExplain: "This provider doesn't require a deposit. There is still no insurance on this rental — you're responsible for any damage during your hire.",
       photoNote: "At pickup and return, take timestamped photos of the vehicle in-app. It's your record if there's ever a dispute about the deposit.",
-      paidDirect: "Paid directly to the supplier",
+      paidDirect: "Paid directly to the provider",
       tierBaseLabel: "1+ days", tierRangeLabel: "{days}+ days",
       quickId: "Quick ID check on first booking",
       requestToBook: "Request to book",
@@ -539,7 +539,7 @@ const STRINGS = {
       datesTaken: "{vehicle} is already booked for part of {from} – {to}. Try different dates.",
       requestSent: "Request sent", reference: "Reference",
       supplierWillConfirm: "{supplier} will confirm availability and arrange payment directly with you.",
-      whatsapp: "WhatsApp", call: "Call", noPhoneOnFile: "This supplier hasn't added a contact number yet — check back in your dashboard for updates.",
+      whatsapp: "WhatsApp", call: "Call", noPhoneOnFile: "This provider hasn't added a contact number yet — check back in your dashboard for updates.",
       conditionHeader: "VEHICLE CONDITION RECORD",
       pickupPhotos: "Pickup photos", returnPhotos: "Return photos",
       pickupDoneSub: "{total} photos logged", pickupPendingSub: "Take before you drive off · {done}/{total}",
@@ -582,13 +582,13 @@ const STRINGS = {
       alreadySaved: "Saved",
     },
     id: {
-      title: "Verify your license", subtitle: "One-time check so suppliers know you're good to drive — this is saved to your account, not just this device.",
+      title: "Verify your license", subtitle: "One-time check so providers know you're good to drive — this is saved to your account, not just this device.",
       fullName: "Full name (as on license)", licenseNumber: "License number", expiry: "Expiry date", country: "Issuing country",
-      phone: "Phone number", phoneNote: "So the supplier can reach you about this booking — shared only with suppliers you book with.",
-      idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — suppliers may ask to see it alongside your license at pickup.",
+      phone: "Phone number", phoneNote: "So the provider can reach you about this booking — shared only with providers you book with.",
+      idpNote: "Since this license wasn't issued in Vanuatu, bring your International Driving Permit (IDP) too — providers may ask to see it alongside your license at pickup.",
       photoLabel: "Photo of your license", tapUpload: "Tap to capture or upload",
       verifyBtn: "Verify my license",
-      privacy: "Your photo is read on your device and checked against what you typed. It is kept on file with your account, and the supplier you send a booking request to can see these details and the photo for that booking only.",
+      privacy: "Your photo is read on your device and checked against what you typed. It is kept on file with your account, and the provider you send a booking request to can see these details and the photo for that booking only.",
       checking: "Checking your licence photo against your details...",
       checkNotLicence: "That photo doesn't look like a driving licence. Upload a clear photo of the licence itself.",
       checkUnreadable: "We couldn't read the licence in that photo. Retake it flat, in good light, with all four corners visible.",
@@ -612,7 +612,7 @@ const STRINGS = {
     },
     licence: {
       stepTitle: "Your driving licence",
-      stepIntro: "The supplier will see these details with your request. Check they are right before you send it.",
+      stepIntro: "The provider will see these details with your request. Check they are right before you send it.",
       loading: "Checking your licence...",
       number: "Licence number", country: "Issued in", expiry: "Expires", photoOn: "Photo on file", photoOff: "No photo on file",
       update: "Update licence details",
@@ -641,15 +641,15 @@ const STRINGS = {
       whatIssue: "What's the issue?",
       categories: { depositNotRefunded: "Deposit not refunded", damageDisagreement: "Damage disagreement", notAsDescribed: "Vehicle not as described", other: "Other" },
       tellUs: "Tell us what happened",
-      placeholder: "Add any details that will help us and the supplier sort this out...",
+      placeholder: "Add any details that will help us and the provider sort this out...",
       photoNote: "Your {pickup}-photo pickup record and {return}-photo return record will be attached automatically.",
       submit: "Submit report",
       reportIssue: "Report an issue with this booking",
     },
     supplier: {
-      dashboardLabel: "SUPPLIER DASHBOARD",
+      dashboardLabel: "FLEET PROVIDER DASHBOARD",
       welcomeBack: "Welcome back, {supplier}",
-      editProfile: "Edit profile", profileTitle: "Your supplier profile",
+      editProfile: "Edit profile", profileTitle: "Your provider profile",
       profileIntro: "Renters see your business name and use this phone number to call or WhatsApp you about bookings. Changes are checked by Terima Rides before they go live.",
       profileBusinessName: "Business name", profileContactName: "Contact person", profilePhone: "Phone / WhatsApp", profileEmail: "Contact email",
       profilePhoneHint: "Include the country code, e.g. +678 711 6413", profileSave: "Send for approval", profileCancel: "Cancel",
@@ -741,7 +741,7 @@ const STRINGS = {
       pricePerDay: "Price per day (VUV)",
       depositPolicy: "Deposit policy", noDeposit: "No deposit", depositRequired: "Deposit required",
       depositAmount: "Deposit amount (VUV, refundable)",
-      photoNote: "This supplier hasn't added photos yet — shown here with a colour-coded icon instead.",
+      photoNote: "This provider hasn't added photos yet — shown here with a colour-coded icon instead.",
       photoLabel: "Vehicle photo", addPhotoCta: "Add a photo",
       photoOptionalNote: "Optional, but listings with a photo get more bookings. You can add more photos any time after listing.",
       multiDayRates: "Multi-day rates", multiDayRatesNote: "Optional — offer a lower per-day price for longer bookings. Add as many thresholds as you like.",
@@ -762,7 +762,7 @@ const STRINGS = {
       gateBullet3: "Nothing upfront — pay only on completed bookings",
       startBtn: "Start verification",
       title: "Verify your business",
-      subtitle: "A quick check so renters know you're a real, accountable supplier.",
+      subtitle: "A quick check so renters know you're a real, accountable provider.",
       businessName: "Business / trading name", businessNamePh: "e.g. Vila 4x4 Rentals",
       contactName: "Contact person", contactNamePh: "e.g. Sarah Malantugun",
       phone: "Phone number", email: "Email address",
@@ -779,12 +779,12 @@ const STRINGS = {
       submitBtn: "Submit for review",
       submitting: "Submitting your application...",
       pendingTitle: "Application submitted",
-      pendingBody: "We typically review new suppliers within 1–2 business days. We'll email you once you're approved and your listings go live.",
+      pendingBody: "We typically review new providers within 1–2 business days. We'll email you once you're approved and your listings go live.",
       pendingFor: "Application for",
       demoNote: "Prototype only — skip the wait to preview the approved dashboard.",
       realPendingNote: "No action needed on your end — this page will update automatically once you're approved.",
       simulateApproval: "Simulate approval",
-      verifiedBadge: "Verified supplier",
+      verifiedBadge: "Verified fleet provider",
     },
     photo: {
       tooLarge: "That photo is too large ({size}MB). Please pick one under {max}MB.",
@@ -1783,7 +1783,7 @@ function SupplierAuthProvider({ children }) {
         await sbUpdate("suppliers", `id=eq.${profile.id}`, { kyc_status: "verified" }, accessToken);
         setStatus("verified");
       } catch (e) {
-        setApplyError("Blocked as expected — clients can't self-approve. Run the SQL below as an admin to approve this test supplier.");
+        setApplyError("Blocked as expected — clients can't self-approve. Run the SQL below as an admin to approve this test provider.");
       }
       return;
     }
@@ -1958,16 +1958,16 @@ const LEGAL_CONTENT = {
     terms: {
       title: "Terms of Service",
       sections: [
-        { h: "1. Who we are", b: "Terima Rides is an online marketplace based in Port Vila, Efate, Vanuatu that connects independent vehicle rental suppliers with customers looking to rent a car, scooter, or other vehicle on Efate Island. Terima Rides is not a vehicle rental company itself, does not own or operate any of the listed vehicles, and is not a party to the rental agreement between a customer and a supplier." },
-        { h: "2. Accounts and verification", b: "To book a vehicle, customers must create an account and verify a valid driver's license. To list a vehicle, suppliers must create an account and complete a one-time identity and vehicle-document verification. You're responsible for keeping your login details secure and for the accuracy of the information you provide." },
-        { h: "3. Bookings", b: "A booking request isn't confirmed until the supplier accepts it in the app. Vehicle availability, condition, and pickup/return arrangements are set by the supplier. Photos are taken at pickup and return inside the app to create a shared record of the vehicle's condition." },
-        { h: "4. Payment and deposits", b: "Terima Rides does not process rental payments or security deposits. Payment for the rental itself, and any deposit, is arranged and paid directly between the customer and the supplier, on whatever terms the supplier has stated. Terima Rides only invoices suppliers a service commission (currently 8%) on completed bookings, separately from what the customer pays the supplier." },
-        { h: "5. Cancellations and refunds", b: "See our separate Cancellation Policy. In short: cancellation terms, and any refund of amounts paid directly to a supplier, are between the customer and that supplier — Terima Rides does not hold or refund rental payments." },
+        { h: "1. Who we are", b: "Terima Rides is an online marketplace based in Port Vila, Efate, Vanuatu that connects independent vehicle rental providers with customers looking to rent a car, scooter, or other vehicle on Efate Island. Terima Rides is not a vehicle rental company itself, does not own or operate any of the listed vehicles, and is not a party to the rental agreement between a customer and a provider." },
+        { h: "2. Accounts and verification", b: "To book a vehicle, customers must create an account and verify a valid driver's license. To list a vehicle, providers must create an account and complete a one-time identity and vehicle-document verification. You're responsible for keeping your login details secure and for the accuracy of the information you provide." },
+        { h: "3. Bookings", b: "A booking request isn't confirmed until the provider accepts it in the app. Vehicle availability, condition, and pickup/return arrangements are set by the provider. Photos are taken at pickup and return inside the app to create a shared record of the vehicle's condition." },
+        { h: "4. Payment and deposits", b: "Terima Rides does not process rental payments or security deposits. Payment for the rental itself, and any deposit, is arranged and paid directly between the customer and the provider, on whatever terms the provider has stated. Terima Rides only invoices providers a service commission (currently 8%) on completed bookings, separately from what the customer pays the provider." },
+        { h: "5. Cancellations and refunds", b: "See our separate Cancellation Policy. In short: cancellation terms, and any refund of amounts paid directly to a provider, are between the customer and that provider — Terima Rides does not hold or refund rental payments." },
         { h: "6. Disputes", b: "If something goes wrong with a booking (for example, a disagreement over deposit deductions or vehicle condition), you can raise it in the app. Terima Rides will review the pickup/return photos and both parties' accounts and try to help reach a resolution, but we are not a court or arbitrator and cannot force either party to pay or refund anything." },
-        { h: "7. Supplier responsibilities", b: "Suppliers are responsible for making sure their vehicles are roadworthy, insured and legally permitted to be rented in Vanuatu, for the accuracy of their listings, and for complying with all applicable local laws." },
-        { h: "8. Customer responsibilities", b: "Customers are responsible for holding a valid driver's license (and International Driving Permit where required), for driving safely and legally, and for returning the vehicle in the condition agreed with the supplier." },
+        { h: "7. Provider responsibilities", b: "Providers are responsible for making sure their vehicles are roadworthy, insured and legally permitted to be rented in Vanuatu, for the accuracy of their listings, and for complying with all applicable local laws." },
+        { h: "8. Customer responsibilities", b: "Customers are responsible for holding a valid driver's license (and International Driving Permit where required), for driving safely and legally, and for returning the vehicle in the condition agreed with the provider." },
         { h: "9. Prohibited conduct", b: "You may not use Terima Rides to list or book a vehicle fraudulently, to circumvent identity verification, or to harass or discriminate against another user." },
-        { h: "10. Liability", b: "Terima Rides provides the platform \"as is\" and is not liable for the condition of any vehicle, the conduct of any supplier or customer, or any loss arising from a booking. Nothing in these terms limits liability that cannot legally be limited." },
+        { h: "10. Liability", b: "Terima Rides provides the platform \"as is\" and is not liable for the condition of any vehicle, the conduct of any provider or customer, or any loss arising from a booking. Nothing in these terms limits liability that cannot legally be limited." },
         { h: "11. Changes to these terms", b: "We may update these terms from time to time; continued use of Terima Rides after a change means you accept the updated terms." },
         { h: "12. Governing law", b: "These terms are governed by the laws of Vanuatu." },
         { h: "13. Contact", b: `Questions about these terms can be sent to ${SUPPORT_EMAIL}.` },
@@ -1976,9 +1976,9 @@ const LEGAL_CONTENT = {
     privacy: {
       title: "Privacy Policy",
       sections: [
-        { h: "1. What we collect", b: "Account details (name, email, phone); for customers, driver's license details and a photo of the license; for suppliers, identity-document and vehicle-document photos, plus business details; booking details (dates, vehicle, price); pickup/return condition photos; and any messages or dispute descriptions you submit in the app." },
+        { h: "1. What we collect", b: "Account details (name, email, phone); for customers, driver's license details and a photo of the license; for providers, identity-document and vehicle-document photos, plus business details; booking details (dates, vehicle, price); pickup/return condition photos; and any messages or dispute descriptions you submit in the app." },
         { h: "2. Why we collect it", b: "To verify who you are before you can book or list a vehicle, to operate bookings and invoicing, to protect both parties in the event of a dispute over a vehicle's condition, and to communicate with you about your bookings and account." },
-        { h: "3. Who can see it", b: "Your own account details are visible to you. A supplier can see the booking and contact details of a customer who books their vehicle (and vice versa) so the rental can happen. Terima Rides admins can access identity documents and vehicle documents solely to verify suppliers and to review disputes. We do not sell your personal information to third parties or use it for advertising." },
+        { h: "3. Who can see it", b: "Your own account details are visible to you. A provider can see the booking and contact details of a customer who books their vehicle (and vice versa) so the rental can happen. Terima Rides admins can access identity documents and vehicle documents solely to verify providers and to review disputes. We do not sell your personal information to third parties or use it for advertising." },
         { h: "4. Where it's stored", b: "Your data is stored with our database and file-storage provider (Supabase), with access controls in place so that identity documents and vehicle photos are only reachable by the account they belong to, the relevant counterparty for an active booking, or an admin." },
         { h: "5. How long we keep it", b: "We keep account and booking data for as long as your account is active, and for a reasonable period after to meet legal, accounting and dispute-resolution needs." },
         { h: "6. Your choices", b: `You can ask us to see what personal information we hold about you, correct it, or delete your account, by emailing ${SUPPORT_EMAIL}. Deleting your account may affect bookings still in progress.` },
@@ -1990,11 +1990,11 @@ const LEGAL_CONTENT = {
     cancellation: {
       title: "Cancellation & Refunds",
       sections: [
-        { h: "1. Refunds go through the supplier", b: "Because Terima Rides does not process rental payments, we cannot issue refunds ourselves — refunds, if any, come from the supplier directly." },
-        { h: "2. Cancelling a booking", b: "You can cancel a pending or accepted booking from \"My Bookings\" in the app at any time before pickup. This updates the booking's status immediately for both you and the supplier." },
-        { h: "3. Refunds", b: "Whether any amount you've already paid a supplier is refunded, and how much, is between you and that supplier. If you've paid a deposit directly to a supplier and believe it's being withheld unfairly after a cancellation, you can raise a dispute in the app and we'll review it." },
-        { h: "4. Supplier cancellations", b: "A supplier can decline a pending request at no cost to either side. If a supplier cancels a booking you'd already arranged to pick up, contact them directly about any amount you've paid, and raise a dispute in the app if you can't resolve it together." },
-        { h: "5. No-shows", b: "If you don't collect the vehicle at the agreed time and haven't cancelled, the supplier's own no-show policy (as stated in their listing or agreed with you directly) applies." },
+        { h: "1. Refunds go through the provider", b: "Because Terima Rides does not process rental payments, we cannot issue refunds ourselves — refunds, if any, come from the provider directly." },
+        { h: "2. Cancelling a booking", b: "You can cancel a pending or accepted booking from \"My Bookings\" in the app at any time before pickup. This updates the booking's status immediately for both you and the provider." },
+        { h: "3. Refunds", b: "Whether any amount you've already paid a provider is refunded, and how much, is between you and that provider. If you've paid a deposit directly to a provider and believe it's being withheld unfairly after a cancellation, you can raise a dispute in the app and we'll review it." },
+        { h: "4. Provider cancellations", b: "A provider can decline a pending request at no cost to either side. If a provider cancels a booking you'd already arranged to pick up, contact them directly about any amount you've paid, and raise a dispute in the app if you can't resolve it together." },
+        { h: "5. No-shows", b: "If you don't collect the vehicle at the agreed time and haven't cancelled, the provider's own no-show policy (as stated in their listing or agreed with you directly) applies." },
       ],
     },
   },
@@ -6171,7 +6171,7 @@ function AdminListings() {
   );
 }
 
-const AUDIT_ENTITIES = { rental_bookings: "Booking", invoices: "Invoice", suppliers: "Supplier", profiles: "Renter", disputes: "Dispute", licence_reviews: "Licence review" };
+const AUDIT_ENTITIES = { rental_bookings: "Booking", invoices: "Invoice", suppliers: "Provider", profiles: "Renter", disputes: "Dispute", licence_reviews: "Licence review" };
 const AUDIT_FIELDS = { status: "status", cancelled_by: "cancelled by", cancelled_at: "cancelled at", date_from: "from", date_to: "to", pickup_completed_at: "pickup done", return_completed_at: "return done", deposit_refunded_at: "deposit refunded", deposit_refund_amount: "refund", deposit_deduction_reason: "deduction reason", paid_at: "paid", waived_at: "waived", waive_reason: "waive reason", payment_reference: "payment ref", verified: "verified", business_name: "business name", contact_name: "contact", phone: "phone", email: "email", profile_change_note: "note", id_verified: "licence on file", license_number: "licence number", license_country: "licence country", license_expiry: "licence expiry", license_photo_url: "licence photo", resolution: "resolution", note: "note" };
 
 function auditValue(v) {
